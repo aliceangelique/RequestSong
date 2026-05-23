@@ -1138,26 +1138,12 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-brand-yellow selection:text-slate-950" id="rpd-app-root">
       
       {/* LGBTQIA+ PRIDE DECORATED HEADBAND RIBBON */}
-      <div className="h-1.5 w-full flex opacity-90" aria-hidden="true" id="pride-rainbow-header">
-        <div className="flex-1 bg-[#E40303]" title="Life" />
-        <div className="flex-1 bg-[#FF8C00]" title="Healing" />
-        <div className="flex-1 bg-[#FFED00]" title="Sunlight" />
-        <div className="flex-1 bg-[#008026]" title="Nature" />
-        <div className="flex-1 bg-[#004CFF]" title="Harmony" />
-        <div className="flex-1 bg-[#732982]" title="Spirit" />
-      </div>
+      <div className="h-1.5 w-full bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982] opacity-90" aria-hidden="true" id="pride-rainbow-header" />
 
       {/* QUICK STATUS BAR WITH IDENTITY SYSTEM */}
       <div className="bg-slate-900/90 border-b border-brand-yellow/20 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 backdrop-blur">
         <div className="flex items-center gap-2">
-          <span className="inline-flex h-3.5 w-5 rounded overflow-hidden flex-shrink-0" title="LGBTQIA+ Community Support Pride Banner">
-            <span className="w-[16.6%] bg-[#E40303] h-full" />
-            <span className="w-[16.6%] bg-[#FF8C00] h-full" />
-            <span className="w-[16.6%] bg-[#FFED00] h-full" />
-            <span className="w-[16.6%] bg-[#008026] h-full" />
-            <span className="w-[16.6%] bg-[#004CFF] h-full" />
-            <span className="w-[16.6%] bg-[#732982] h-full" />
-          </span>
+          <span className="inline-flex h-3.5 w-5 rounded overflow-hidden flex-shrink-0 bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982]" title="LGBTQIA+ Community Support Pride Banner" />
           <span className="text-slate-350 font-bold flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow animate-pulse" />
             Bangkok Random Dance's Song request system
@@ -1472,7 +1458,7 @@ export default function App() {
                 <div className={`space-y-6 lg:col-span-5 ${mobileDancerTab === 'request' ? 'block' : 'hidden lg:block'}`}>
                   {/* STANDARD SUBMISSION FORM */}
                   <div className={`bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden ${mobileDancerTab === 'request' ? 'block' : 'hidden lg:block'}`} id="dancer-request-panel">
-                  <div className="absolute top-0 left-0 w-[4px] bg-brand-yellow h-full" />
+                  <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
                   
                   <h3 className="text-sm font-black text-white flex items-center gap-2 mb-1">
                     <span className="px-1 py-0.2 rounded bg-brand-yellow text-slate-950 text-[9px] font-black uppercase">REQUEST</span>
@@ -1666,7 +1652,7 @@ export default function App() {
                   const igShortcode = getInstagramShortcode(currentEvent.instagramUrl);
                   return (
                     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden flex flex-col hidden lg:flex" id="promote-instagram-poster">
-                      <div className="absolute top-0 left-0 w-[4px] bg-brand-yellow h-full" />
+                      <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                           <Instagram className="w-4.5 h-4.5 text-brand-yellow" />
@@ -1859,7 +1845,7 @@ export default function App() {
               const igShortcode = getInstagramShortcode(currentEvent.instagramUrl);
               return (
                 <div className="block lg:hidden bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden flex flex-col mt-6" id="promote-instagram-poster-mobile">
-                  <div className="absolute top-0 left-0 w-[4px] bg-brand-yellow h-full" />
+                  <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-1.5">
                       <Instagram className="w-4.5 h-4.5 text-brand-yellow" />
@@ -1950,7 +1936,7 @@ export default function App() {
 
               {/* SCHEDULE EVENT CREATION PORTLET */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden" id="creator-event-form">
-                <div className="absolute top-0 left-0 w-[4px] bg-brand-yellow h-full" />
+                <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
                 <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2 mb-1">
                   <Calendar className="w-4 h-4 text-brand-yellow" />
                   <span>Create / Schedule Next Event Space</span>
@@ -2616,14 +2602,7 @@ export default function App() {
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-slate-900 border-2 border-yellow-400 max-w-sm w-full rounded-2xl overflow-hidden shadow-2xl relative"
             >
-              <div className="h-1.5 w-full flex">
-                <div className="flex-1 bg-[#E40303]" />
-                <div className="flex-1 bg-[#FF8C00]" />
-                <div className="flex-1 bg-[#FFED00]" />
-                <div className="flex-1 bg-[#008026]" />
-                <div className="flex-1 bg-[#004CFF]" />
-                <div className="flex-1 bg-[#732982]" />
-              </div>
+              <div className="h-1.5 w-full bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982]" />
 
               <div className="p-5 space-y-4">
                 <div className="flex items-center justify-between">
