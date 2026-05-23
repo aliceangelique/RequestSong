@@ -1,0 +1,173 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net - Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helper Functions ---
+    
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerified() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isAdmin() {
+      return isVerified() && request.auth.token.email == "Digimon.Angelique@gmail.com";
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    // Helper to check for a valid song request shape
+    function isValidSongRequest(data) {
+      return data.id is string && data.id.size() >= 1 && data.id.size() <= 128
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 200
+        && data.artist is string && data.artist.size() >= 1 && data.artist.size() <= 200
+        && data.creatorId is string && data.creatorId.size() >= 1 && data.creatorId.size() <= 128
+        && data.creatorName is string && data.creatorName.size() >= 1 && data.creatorName.size() <= 200
+        && data.creatorEmail is string && data.creatorEmail.size() >= 1 && data.creatorEmail.size() <= 200
+        && data.votesCount is int && data.votesCount >= -100 && data.votesCount <= 1000000
+        && data.status is string && (data.status == "pending" || data.status == "approved" || data.status == "rejected" || data.status == "played")
+        && (!('dancePart' in data) || data.dancePart is string)
+        && (!('youtubeUrl' in data) || data.youtubeUrl is string)
+        && (!('timestamp' in data) || data.timestamp is string)
+        && (!('eventId' in data) || data.eventId is string);
+    }
+
+    // Helper to check for a valid vote shape
+    function isValidVote(data) {
+      return data.voterId is string && data.voterId == request.auth.uid
+        && data.voterName is string && data.voterName.size() >= 1 && data.voterName.size() <= 200
+        && data.createdAt == request.time;
+    }
+
+    // Helper to check for a valid dance event shape
+    function isValidDanceEvent(data) {
+      return data.name is string && data.name.size() >= 1 && data.name.size() <= 300
+        && data.place is string && data.place.size() >= 1 && data.place.size() <= 300
+        && data.time is string && data.time.size() >= 1 && data.time.size() <= 200
+        && data.instagramUrl is string && data.instagramUrl.size() <= 500
+        && data.createdAt == request.time;
+    }
+
+    // Helper to check for a valid active event setting shape
+    function isValidActiveEventSetting(data) {
+      return data.activeEventId is string && data.activeEventId.size() >= 1 && data.activeEventId.size() <= 128
+        && (!('updatedAt' in data) || data.updatedAt == request.time);
+    }
+
+    // --- Core Match Rules ---
+
+    match /songRequests/{requestId} {
+      // Standard users and guests who are logged in can scan the queue/leaderboard
+      allow read, list: if isSignedIn();
+
+      // Deleting a request from the queue is strictly restricted to administrative control
+      allow delete: if isAdmin();
+
+      // Create a song request (starts as pending with 1 vote)
+      allow create: if (
+        isVerified()
+        && isValidId(requestId)
+        && incoming().id == requestId
+        && isValidSongRequest(incoming())
+        && incoming().creatorId == request.auth.uid
+        && incoming().creatorEmail == request.auth.token.email
+        && incoming().status == "pending"
+        && incoming().votesCount == 1
+        && request.resource.data.createdAt == request.time
+        && request.resource.data.updatedAt == request.time
+      );
+
+      // Multi-branch update with strict action grouping
+      allow update: if (
+        isVerified()
+        && isValidSongRequest(incoming())
+        && incoming().creatorId == resource.data.creatorId
+        && incoming().creatorEmail == resource.data.creatorEmail
+        && incoming().createdAt == resource.data.createdAt
+        && (
+          // Action 1: Admin-only Status Updates (approving, denying, marking as played)
+          (isAdmin() && incoming().diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt']) && incoming().updatedAt == request.time)
+          
+          ||
+          
+          // Action 2: Incremental Upvote / Downvote retract (anyone can upvote but MUST write their vote record atomically in the subcollection)
+          ((
+            (incoming().votesCount == resource.data.votesCount + 1 && existsAfter(/databases/$(database)/documents/songRequests/$(requestId)/votes/$(request.auth.uid)))
+            || (incoming().votesCount == resource.data.votesCount - 1 && !existsAfter(/databases/$(database)/documents/songRequests/$(requestId)/votes/$(request.auth.uid)))
+           )
+           && incoming().diff(resource.data).affectedKeys().hasOnly(['votesCount', 'updatedAt'])
+           && incoming().updatedAt == request.time)
+           
+          ||
+          
+          // Action 3: Owner-only Information edits (only permitted while state is "pending")
+          (resource.data.creatorId == request.auth.uid
+           && resource.data.status == "pending"
+           && incoming().diff(resource.data).affectedKeys().hasOnly(['title', 'artist', 'updatedAt'])
+           && incoming().updatedAt == request.time)
+        )
+      );
+
+      // --- Vote Subcollection ---
+      match /votes/{userId} {
+        // Authenticated users can list/read votes (needed to verify if voter already upvoted)
+        allow read, list: if isSignedIn();
+
+        // Any verified user can create their own vote doc, but only if they are the authenticated userId 
+        // and the parent request exists.
+        allow create: if (
+          isVerified()
+          && userId == request.auth.uid
+          && isValidVote(incoming())
+          && exists(/databases/$(database)/documents/songRequests/$(requestId))
+        );
+
+        // Votes can be deleted by standard users if they delete their own vote doc
+        allow delete: if (
+          isVerified()
+          && userId == request.auth.uid
+        );
+
+        // Votes cannot be directly edited by standard users; only Admins (organizers) can cleanup
+        allow update: if isAdmin();
+      }
+    }
+
+    match /danceEvents/{eventId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if (
+        isVerified()
+        && isAdmin()
+        && isValidId(eventId)
+        && incoming().id == eventId
+        && isValidDanceEvent(incoming())
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /settings/{settingId} {
+      allow read, list: if isSignedIn();
+      allow create, update: if (
+        isVerified()
+        && isAdmin()
+        && isValidId(settingId)
+        && settingId == "activeEvent"
+        && isValidActiveEventSetting(incoming())
+      );
+      allow delete: if isAdmin();
+    }
+  }
+}

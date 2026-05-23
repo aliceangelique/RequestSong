@@ -1,0 +1,6 @@
+{
+  "name": "Random Dance Request",
+  "description": "The official real-time song request, voting, and live leaderboard application for Random Play Dance events.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

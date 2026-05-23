@@ -1,0 +1,82 @@
+{
+  "entities": {
+    "songRequest": {
+      "title": "SongRequest",
+      "description": "Represents a song requested by a user for the Random Play Dance event.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The unique ID of the request" },
+        "title": { "type": "string", "description": "The title of the song" },
+        "artist": { "type": "string", "description": "The artist of the song" },
+        "creatorId": { "type": "string", "description": "The Firebase Auth UID of the requesting user" },
+        "creatorName": { "type": "string", "description": "The display name of the requesting user" },
+        "creatorEmail": { "type": "string", "description": "The email of the requesting user" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the request was created" },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Timestamp when the request was last updated" },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "approved", "rejected", "played"],
+          "description": "The verification/operation status of the song request"
+        },
+        "votesCount": { "type": "integer", "description": "The total number of upvotes for this song request" },
+        "dancePart": { "type": "string", "enum": ["Hook 1", "Hook 2", "Breakdance", "none"], "description": "The requested choreo or dance section" },
+        "youtubeUrl": { "type": "string", "description": "An optional Youtube reference video URL" },
+        "timestamp": { "type": "string", "description": "Requested section timestamp bounds" },
+        "eventId": { "type": "string", "description": "The event ID this request belongs to" }
+      },
+      "required": ["id", "title", "artist", "creatorId", "creatorName", "creatorEmail", "createdAt", "updatedAt", "status", "votesCount"]
+    },
+    "vote": {
+      "title": "Vote",
+      "description": "A vote recorded by a specific user for a specific song request.",
+      "type": "object",
+      "properties": {
+        "voterId": { "type": "string", "description": "The Firebase Auth UID of the user who voted" },
+        "voterName": { "type": "string", "description": "The display name of the user who voted" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Timestamp when the vote was cast" }
+      },
+      "required": ["voterId", "voterName", "createdAt"]
+    },
+    "danceEvent": {
+      "title": "DanceEvent",
+      "description": "Represents a dance play space event scheduled by organizers.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "The event ID" },
+        "name": { "type": "string", "description": "Event Title or descriptor" },
+        "place": { "type": "string", "description": "Venue details" },
+        "time": { "type": "string", "description": "Structured date / time representation" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Time the event was registered" },
+        "instagramUrl": { "type": "string", "description": "Optional social media poster URL link" }
+      },
+      "required": ["id", "name", "place", "time"]
+    },
+    "activeEventSetting": {
+      "title": "ActiveEventSetting",
+      "description": "System config settings that define the active event.",
+      "type": "object",
+      "properties": {
+        "activeEventId": { "type": "string", "description": "The globally highlighted event ID" }
+      },
+      "required": ["activeEventId"]
+    }
+  },
+  "firestore": {
+    "/songRequests/{requestId}": {
+      "schema": "songRequest",
+      "description": "The primary collection of requested songs."
+    },
+    "/songRequests/{requestId}/votes/{userId}": {
+      "schema": "vote",
+      "description": "A subcollection ensuring one-vote-per-user per song request."
+    },
+    "/danceEvents/{eventId}": {
+      "schema": "danceEvent",
+      "description": "All scheduled / historical random play dance events."
+    },
+    "/settings/{settingId}": {
+      "schema": "activeEventSetting",
+      "description": "Global application setting configurations."
+    }
+  }
+}
