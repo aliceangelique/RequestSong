@@ -270,15 +270,27 @@ export default function App() {
         uid: firebaseUser.uid,
         displayName: firebaseUser.displayName || 'Anonymous Dancer',
         email: firebaseUser.email || 'dancer@randomdance.net',
-        photoURL: firebaseUser.photoURL || undefined
+        photoURL: firebaseUser.photoURL || undefined,
+        isSimulated: false
       };
     }
-    return offlineUser;
+    if (offlineUser) {
+      return {
+        ...offlineUser,
+        isSimulated: true
+      };
+    }
+    return null;
   }, [firebaseUser, offlineUser]);
 
   // Admin identity check (specifically Digimon.Angelique@gmail.com specified by user context)
   const isAdmin = useMemo(() => {
-    return currentUser?.email === 'Digimon.Angelique@gmail.com';
+    if (!currentUser) return false;
+    // Secure guardrail: if Firebase/Firestore config is active, only a real Google authenticated account can be admin
+    if (isFirebaseConfigured && currentUser.isSimulated) {
+      return false;
+    }
+    return currentUser.email?.toLowerCase() === 'digimon.angelique@gmail.com';
   }, [currentUser]);
 
   // Secure admin guardrail: revert non-admin users straight to the user dancer workspace
@@ -2608,7 +2620,7 @@ export default function App() {
                 <div className="flex items-center justify-between">
                   <h3 className="font-extrabold text-white text-sm flex items-center gap-1.5">
                     <UserIcon className="w-4 h-4 text-yellow-400" />
-                    <span>Select Simulated Identity</span>
+                    <span>User Authentication</span>
                   </h3>
                   <button
                     onClick={() => setShowRoleSelector(false)}
@@ -2618,8 +2630,114 @@ export default function App() {
                   </button>
                 </div>
 
-                <p className="text-xs text-slate-400 leading-normal">
-                  Toggle different attendee profiles below to simulate multi-user support, test vote tallies, or review administrative views.
+                {isFirebaseConfigured && (
+                  <div className="bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/60 space-y-2.5" id="rpd-auth-portal-block">
+                    <p className="text-[10px] font-black uppercase text-yellow-400 tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                      <span>Security: True Google Auth</span>
+                    </p>
+                    {currentUser && !currentUser.isSimulated ? (
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 p-2 rounded-xl text-left">
+                          {currentUser.photoURL ? (
+                            <img
+                              src={currentUser.photoURL}
+                              alt={currentUser.displayName}
+                              className="w-8 h-8 rounded-full border border-brand-yellow object-cover"
+                              referrerPolicy="no-referrer"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-brand-yellow text-slate-950 flex items-center justify-center font-black text-xs">
+                              {currentUser.displayName.charAt(0)}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-white truncate leading-tight">{currentUser.displayName}</p>
+                            <p className="text-[9px] text-slate-400 truncate leading-normal mt-0.5">{currentUser.email}</p>
+                          </div>
+                        </div>
+
+                        {isAdmin ? (
+                          <div className="space-y-2.5">
+                            <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-2.5 text-left">
+                              <p className="text-[10px] font-black text-emerald-400 uppercase tracking-widest flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-ping" />
+                                <span>👑 Admin Access Active</span>
+                              </p>
+                              <p className="text-[9px] text-slate-400 leading-normal mt-0.5">
+                                You are logged in as the organizer. Use the toggles below to alternate between views:
+                              </p>
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-2">
+                              <button
+                                onClick={() => {
+                                  setUserRole('user');
+                                  setShowRoleSelector(false);
+                                }}
+                                className={`py-2 px-3 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-1 cursor-pointer transition active:scale-95 ${
+                                  userRole === 'user'
+                                    ? 'bg-brand-yellow text-slate-950 font-black shadow-md shadow-brand-yellow/10'
+                                    : 'bg-slate-850 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                }`}
+                              >
+                                🕺 Dancer View
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setUserRole('organizer');
+                                  setShowRoleSelector(false);
+                                }}
+                                className={`py-2 px-3 rounded-xl font-black text-[10px] uppercase flex items-center justify-center gap-1 cursor-pointer transition active:scale-95 ${
+                                  userRole === 'organizer'
+                                    ? 'bg-brand-yellow text-slate-950 font-black shadow-md shadow-brand-yellow/10'
+                                    : 'bg-slate-850 text-slate-400 hover:text-slate-200 border border-slate-800'
+                                }`}
+                              >
+                                👑 Organizer
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-2.5 text-left text-center">
+                            <p className="text-[10px] font-bold text-amber-400">Standard Dancer Account</p>
+                            <p className="text-[9px] text-slate-400 leading-normal mt-0.5">
+                              Ask the event administrator to grant admin rights to this account.
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <>
+                        <button
+                          onClick={() => {
+                            triggerGoogleSignInFlow();
+                            setShowRoleSelector(false);
+                          }}
+                          className="w-full py-2.5 px-3 rounded-xl bg-brand-yellow font-black text-slate-950 text-xs uppercase flex items-center justify-center gap-1.5 transition hover:brightness-110 active:scale-98 cursor-pointer shadow-md shadow-brand-yellow/10"
+                        >
+                          <LogIn className="w-4 h-4" />
+                          <span>Sign In with Google</span>
+                        </button>
+                        <p className="text-[9px] text-slate-400 text-center leading-normal">
+                          To access both <strong>Organizer</strong> and <strong>Dancer</strong> views, you must authenticate securely via Google as <strong className="text-white">Digimon.Angelique@gmail.com</strong>.
+                        </p>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 right-0 flex items-center" aria-hidden="true">
+                    <div className="w-full border-t border-slate-800" />
+                  </div>
+                  <div className="relative flex justify-center text-[10px] uppercase font-black">
+                    <span className="bg-slate-900 px-2 text-slate-500">Attendee Simulation</span>
+                  </div>
+                </div>
+
+                <p className="text-[11px] text-slate-400 leading-normal text-center">
+                  Select standard profiles below to simulate team members or other dancers.
                 </p>
 
                 <div className="space-y-2">
@@ -2638,20 +2756,34 @@ export default function App() {
                     </div>
                   </button>
 
-                  <button
-                    onClick={() => handleSimulatedProfileSwitch({
-                      uid: 'user_angelique',
-                      displayName: 'Angelique DJ',
-                      email: 'Digimon.Angelique@gmail.com'
-                    })}
-                    className="w-full p-2.5 rounded-lg bg-slate-950 hover:bg-yellow-400 hover:text-slate-950 text-left transition flex items-center gap-2 border border-yellow-400/40 cursor-pointer"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-yellow-400 text-slate-950 flex items-center justify-center text-xs font-black font-serif">DJ</div>
-                    <div>
-                      <p className="text-xs font-black">Angelique (Event Organizer)</p>
-                      <p className="text-[10px] text-slate-450">Digimon.Angelique@gmail.com [DJ]</p>
+                  {isFirebaseConfigured ? (
+                    <div className="w-full p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/40 text-left flex items-center justify-between gap-2 opacity-60">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-slate-850 flex items-center justify-center text-xs font-black text-slate-400 font-serif">DJ</div>
+                        <div>
+                          <p className="text-xs font-bold text-slate-400">Angelique (Event Organizer)</p>
+                          <p className="text-[9px] text-yellow-500 font-black uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
+                            <Lock className="w-2.5 h-2.5" /> Google Sign-in Required
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                  </button>
+                  ) : (
+                    <button
+                      onClick={() => handleSimulatedProfileSwitch({
+                        uid: 'user_angelique',
+                        displayName: 'Angelique DJ',
+                        email: 'Digimon.Angelique@gmail.com'
+                      })}
+                      className="w-full p-2.5 rounded-lg bg-slate-950 hover:bg-yellow-400 hover:text-slate-950 text-left transition flex items-center gap-2 border border-yellow-400/40 cursor-pointer"
+                    >
+                      <div className="w-6 h-6 rounded-full bg-yellow-400 text-slate-950 flex items-center justify-center text-xs font-black font-serif">DJ</div>
+                      <div>
+                        <p className="text-xs font-black">Angelique (Event Organizer)</p>
+                        <p className="text-[10px] text-slate-450">Digimon.Angelique@gmail.com [DJ]</p>
+                      </div>
+                    </button>
+                  )}
 
                   <button
                     onClick={() => handleSimulatedProfileSwitch({
