@@ -8,7 +8,9 @@ import {
   increment,
   serverTimestamp,
   deleteDoc,
-  updateDoc
+  updateDoc,
+  arrayUnion,
+  arrayRemove
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import {
@@ -213,6 +215,7 @@ export default function App() {
   } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [viewingVotersSong, setViewingVotersSong] = useState<SongRequest | null>(null);
 
   // Firestore connection status checker
   const [connectionError, setConnectionError] = useState<boolean>(false);
@@ -579,7 +582,7 @@ export default function App() {
   // Upvote Action Core
   const handleSongUpvoteAction = async (requestId: string) => {
     if (!currentUser) {
-      alert("Please authenticate or switch profile first to vote!");
+      setShowRoleSelector(true);
       return;
     }
 
@@ -603,20 +606,39 @@ export default function App() {
 
         batch.update(songRef, {
           votesCount: increment(1),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          voters: arrayUnion({
+            uid: currentUser.uid,
+            displayName: currentUser.displayName,
+            email: currentUser.email || ''
+          })
         });
 
         await batch.commit();
       } catch (err) {
         console.warn("Firestore upvote failed, applying changes in local frame.", err);
         const updated = requests.map((r) =>
-          r.id === requestId ? { ...r, votesCount: r.votesCount + 1, updatedAt: { seconds: Math.floor(Date.now() / 1000) } } : r
+          r.id === requestId
+            ? {
+                ...r,
+                votesCount: r.votesCount + 1,
+                updatedAt: { seconds: Math.floor(Date.now() / 1000) },
+                voters: [...(r.voters || []), { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email || undefined }]
+              }
+            : r
         );
         persistOfflineDataUpdated(updated);
       }
     } else {
       const updated = requests.map((r) =>
-        r.id === requestId ? { ...r, votesCount: r.votesCount + 1, updatedAt: { seconds: Math.floor(Date.now() / 1000) } } : r
+        r.id === requestId
+          ? {
+              ...r,
+              votesCount: r.votesCount + 1,
+              updatedAt: { seconds: Math.floor(Date.now() / 1000) },
+              voters: [...(r.voters || []), { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email || undefined }]
+            }
+          : r
       );
       persistOfflineDataUpdated(updated);
     }
@@ -625,7 +647,7 @@ export default function App() {
   // Unvote Action Core
   const handleSongUnvoteAction = async (requestId: string) => {
     if (!currentUser) {
-      alert("Please authenticate or switch profile first to unvote!");
+      setShowRoleSelector(true);
       return;
     }
 
@@ -648,20 +670,39 @@ export default function App() {
 
         batch.update(songRef, {
           votesCount: increment(-1),
-          updatedAt: serverTimestamp()
+          updatedAt: serverTimestamp(),
+          voters: arrayRemove({
+            uid: currentUser.uid,
+            displayName: currentUser.displayName,
+            email: currentUser.email || ''
+          })
         });
 
         await batch.commit();
       } catch (err) {
         console.warn("Firestore unvote failed, processing changes local frame.", err);
         const updated = requests.map((r) =>
-          r.id === requestId ? { ...r, votesCount: Math.max(0, r.votesCount - 1), updatedAt: { seconds: Math.floor(Date.now() / 1000) } } : r
+          r.id === requestId
+            ? {
+                ...r,
+                votesCount: Math.max(0, r.votesCount - 1),
+                updatedAt: { seconds: Math.floor(Date.now() / 1000) },
+                voters: (r.voters || []).filter((v) => v.uid !== currentUser.uid)
+              }
+            : r
         );
         persistOfflineDataUpdated(updated);
       }
     } else {
       const updated = requests.map((r) =>
-        r.id === requestId ? { ...r, votesCount: Math.max(0, r.votesCount - 1), updatedAt: { seconds: Math.floor(Date.now() / 1000) } } : r
+        r.id === requestId
+          ? {
+              ...r,
+              votesCount: Math.max(0, r.votesCount - 1),
+              updatedAt: { seconds: Math.floor(Date.now() / 1000) },
+              voters: (r.voters || []).filter((v) => v.uid !== currentUser.uid)
+            }
+          : r
       );
       persistOfflineDataUpdated(updated);
     }
@@ -736,7 +777,12 @@ export default function App() {
       dancePart: dancePart !== 'none' ? dancePart : undefined,
       youtubeUrl: trimmedYoutube || undefined,
       timestamp: trimmedTimestamp || undefined,
-      eventId: effectiveEventId
+      eventId: effectiveEventId,
+      voters: [{
+        uid: currentUser.uid,
+        displayName: currentUser.displayName,
+        email: currentUser.email || ''
+      }]
     };
 
     if (isFirebaseConfigured && db && !connectionError) {
@@ -1494,6 +1540,28 @@ export default function App() {
                         </p>
                       </div>
                     </div>
+                  ) : !currentUser ? (
+                    <div className="py-8 px-4 flex flex-col items-center justify-center text-center space-y-4 bg-slate-950/50 rounded-xl border border-slate-800/60 my-2">
+                      <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800/80 flex items-center justify-center">
+                        <LogIn className="w-5 h-5 text-brand-yellow animate-pulse" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <h4 className="text-xs font-black text-white uppercase tracking-wider">
+                          Sign In Required
+                        </h4>
+                        <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed mx-auto">
+                          Please sign in or identify yourself first to send song requests! This keeps the queue organized and allows tracking who requests each track.
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRoleSelector(true)}
+                        className="w-full py-2.5 px-4 rounded-xl bg-brand-yellow text-slate-950 hover:brightness-110 active:scale-98 transition font-black text-xs uppercase flex items-center justify-center gap-1.5 shadow-sm shadow-brand-yellow/20 cursor-pointer"
+                      >
+                        <LogIn className="w-3.5 h-3.5" />
+                        <span>Sign In with Google</span>
+                      </button>
+                    </div>
                   ) : (
                     <form onSubmit={handleRequestSubmit} className="space-y-4">
                       {/* Title field */}
@@ -1796,6 +1864,18 @@ export default function App() {
                                     <UserIcon className="w-2.5 h-2.5 text-yellow-500" />
                                     <span className="truncate">By {req.creatorName}</span>
                                   </span>
+
+                                  {req.voters && req.voters.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setViewingVotersSong(req)}
+                                      className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-450 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 transition cursor-pointer px-1.5 py-0.5 rounded truncate max-w-[170px]"
+                                      title="Click to see who voted for this track"
+                                    >
+                                      <ThumbsUp className="w-2.5 h-2.5 text-brand-yellow animate-pulse" />
+                                      <span className="truncate">{req.voters.map(v => v.displayName).join(', ')}</span>
+                                    </button>
+                                  )}
 
                                   {req.youtubeUrl && (
                                     <a
@@ -2151,9 +2231,14 @@ export default function App() {
                                   </div>
                                   <p className="text-[10px] text-slate-405 text-slate-400 font-medium">{req.artist}</p>
                                 </div>
-                                <span className="inline-block px-1.5 py-0.5 rounded bg-slate-950 border border-slate-850 text-brand-yellow font-bold text-[10px] flex-shrink-0">
-                                  {req.votesCount} votes
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingVotersSong(req)}
+                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
+                                  title="Click to view voters breakdown"
+                                >
+                                  {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
+                                </button>
                               </div>
 
                               <div className="flex flex-wrap items-center gap-2 text-[10px]">
@@ -2242,9 +2327,9 @@ export default function App() {
                               </div>
                               <p className="text-[10px] text-slate-400 font-medium">{req.artist}</p>
                             </div>
-                            <span className="inline-block px-1.5 py-0.5 rounded bg-slate-950 border border-slate-850 text-brand-yellow font-bold text-[10px] flex-shrink-0">
-                              {req.votesCount} votes
-                            </span>
+                            <button type="button" onClick={() => setViewingVotersSong(req)} className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow hover:text-yellow-350 font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]" title="Click to view voters breakdown">
+                              {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
+                            </button>
                           </div>
 
                           <div className="grid grid-cols-2 gap-2 text-[9px] text-slate-450 bg-slate-950/60 p-1.5 rounded border border-slate-850/45">
@@ -2261,6 +2346,26 @@ export default function App() {
                               <span className="truncate block max-w-full text-slate-350" title={req.creatorEmail}>{req.creatorName}</span>
                             </div>
                           </div>
+
+                          {req.voters && req.voters.length > 0 && (
+                            <div className="bg-slate-950/45 p-2 rounded-lg border border-slate-850 text-[9px] space-y-1">
+                              <span className="block text-[8px] text-slate-505 font-black uppercase tracking-wider">
+                                Track Voters ({req.voters.length}):
+                              </span>
+                              <div className="flex flex-wrap gap-1">
+                                {req.voters.map((voter) => (
+                                  <span
+                                    key={voter.uid}
+                                    className="inline-flex items-center gap-1 rounded bg-slate-900 border border-slate-800 px-1.5 py-0.5 text-[8px] text-slate-300"
+                                    title={voter.email || voter.displayName}
+                                  >
+                                    <span className="h-1 w-1 rounded-full bg-brand-yellow" />
+                                    <span>{voter.displayName}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {req.youtubeUrl && (
                             <div className="text-[10px] pt-1">
@@ -2419,9 +2524,9 @@ export default function App() {
                                       </td>
 
                                       <td className="py-3 px-1 text-center">
-                                        <span className="inline-block px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-brand-yellow font-bold text-[11px]">
+                                        <button type="button" onClick={() => setViewingVotersSong(req)} className="inline-block px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-brand-yellow hover:text-yellow-355 font-bold text-[11px] cursor-pointer transition">
                                           {req.votesCount}
-                                        </span>
+                                        </button>
                                       </td>
 
                                       <td className="py-3 px-1">
@@ -2533,9 +2638,9 @@ export default function App() {
                                 </td>
 
                                 <td className="py-3 px-1 text-center">
-                                  <span className="inline-block px-2 py-0.5 rounded bg-slate-950 border border-slate-800 text-yellow-450 font-bold text-[11px]">
+                                  <button type="button" onClick={() => setViewingVotersSong(req)} className="inline-block px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-yellow-450 hover:text-brand-yellow font-bold text-[11px]">
                                     {req.votesCount}
-                                   </span>
+                                  </button>
                                  </td>
 
                                  <td className="py-3 px-1">
@@ -2726,83 +2831,103 @@ export default function App() {
                     )}
                   </div>
                 )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
-                <div className="relative">
-                  <div className="absolute inset-y-0 left-0 right-0 flex items-center" aria-hidden="true">
-                    <div className="w-full border-t border-slate-800" />
+      {/* VOTER BREAKDOWN MODAL */}
+      <AnimatePresence>
+        {viewingVotersSong && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border-2 border-brand-yellow max-w-sm w-full rounded-2xl overflow-hidden shadow-2xl relative"
+            >
+              <div className="h-1.5 w-full bg-brand-yellow" />
+
+              <div className="p-5 space-y-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black uppercase text-brand-yellow tracking-widest block">
+                      Track Voters List
+                    </span>
+                    <h3 className="font-extrabold text-white text-xs sm:text-sm leading-snug">
+                      {viewingVotersSong.title}
+                    </h3>
+                    <p className="text-[10px] text-slate-400 font-medium">
+                      Artist: {viewingVotersSong.artist}
+                    </p>
                   </div>
-                  <div className="relative flex justify-center text-[10px] uppercase font-black">
-                    <span className="bg-slate-900 px-2 text-slate-500">Attendee Simulation</span>
-                  </div>
+                  <button
+                    onClick={() => setViewingVotersSong(null)}
+                    className="p-1 hover:bg-slate-800 rounded-full transition cursor-pointer flex-shrink-0"
+                    type="button"
+                  >
+                    <X className="w-4 h-4 text-slate-400 hover:text-white" />
+                  </button>
                 </div>
 
-                <p className="text-[11px] text-slate-400 leading-normal text-center">
-                  Select standard profiles below to simulate team members or other dancers.
-                </p>
+                <div className="bg-slate-950/50 rounded-xl border border-slate-800/80 p-3 flex items-center justify-between">
+                  <span className="text-[10px] font-extrabold text-slate-350 uppercase tracking-wide">Total Upvotes</span>
+                  <span className="px-2 py-0.5 rounded bg-brand-yellow text-slate-950 font-black text-[10px] uppercase flex items-center gap-1.5 shadow-sm shadow-brand-yellow/10">
+                    <ThumbsUp className="w-3 h-3" />
+                    <span>{viewingVotersSong.votesCount} {viewingVotersSong.votesCount === 1 ? 'vote' : 'votes'}</span>
+                  </span>
+                </div>
 
-                <div className="space-y-2">
-                  <button
-                    onClick={() => handleSimulatedProfileSwitch({
-                      uid: 'user_lisa',
-                      displayName: 'Lisa Park',
-                      email: 'lisa.dance@gmail.com'
-                    })}
-                    className="w-full p-2.5 rounded-lg bg-slate-950 hover:bg-yellow-400 hover:text-slate-950 text-left transition flex items-center gap-2 cursor-pointer"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-yellow-300">LP</div>
-                    <div>
-                      <p className="text-xs font-bold">Lisa Park</p>
-                      <p className="text-[10px] text-slate-450">lisa.dance@gmail.com (Dancer)</p>
-                    </div>
-                  </button>
-
-                  {isFirebaseConfigured ? (
-                    <div className="w-full p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/40 text-left flex items-center justify-between gap-2 opacity-60">
-                      <div className="flex items-center gap-2">
-                        <div className="w-6 h-6 rounded-full bg-slate-850 flex items-center justify-center text-xs font-black text-slate-400 font-serif">DJ</div>
-                        <div>
-                          <p className="text-xs font-bold text-slate-400">Angelique (Event Organizer)</p>
-                          <p className="text-[9px] text-yellow-500 font-black uppercase tracking-wider flex items-center gap-0.5 mt-0.5">
-                            <Lock className="w-2.5 h-2.5" /> Google Sign-in Required
-                          </p>
-                        </div>
-                      </div>
+                <div className="space-y-1.5 max-h-[220px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-slate-800">
+                  {!viewingVotersSong.voters || viewingVotersSong.voters.length === 0 ? (
+                    <div className="text-center py-4 text-slate-500 space-y-1">
+                      <p className="text-[11px] italic">No custom user votes logged yet.</p>
+                      <p className="text-[9px] text-slate-500 max-w-xs mx-auto">
+                        This track currently has default starting upvotes. Custom user clicks will log attendee profiles.
+                      </p>
                     </div>
                   ) : (
-                    <button
-                      onClick={() => handleSimulatedProfileSwitch({
-                        uid: 'user_angelique',
-                        displayName: 'Angelique DJ',
-                        email: 'Digimon.Angelique@gmail.com'
-                      })}
-                      className="w-full p-2.5 rounded-lg bg-slate-950 hover:bg-yellow-400 hover:text-slate-950 text-left transition flex items-center gap-2 border border-yellow-400/40 cursor-pointer"
-                    >
-                      <div className="w-6 h-6 rounded-full bg-yellow-400 text-slate-950 flex items-center justify-center text-xs font-black font-serif">DJ</div>
-                      <div>
-                        <p className="text-xs font-black">Angelique (Event Organizer)</p>
-                        <p className="text-[10px] text-slate-450">Digimon.Angelique@gmail.com [DJ]</p>
-                      </div>
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => handleSimulatedProfileSwitch({
-                      uid: 'user_dancer',
-                      displayName: 'Sunny Dancer',
-                      email: 'dancer@prideflow.org'
-                    })}
-                    className="w-full p-2.5 rounded-lg bg-slate-950 hover:bg-yellow-400 hover:text-slate-950 text-left transition flex items-center gap-2 cursor-pointer"
-                  >
-                    <div className="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-brand-yellow font-serif">SD</div>
-                    <div>
-                      <p className="text-xs font-bold">Sunny Dancer</p>
-                      <p className="text-[10px] text-slate-450">dancer@prideflow.org (Attendee)</p>
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] font-black text-slate-500 uppercase tracking-wider mb-1">
+                        Dancers who cast a vote ({viewingVotersSong.voters.length}):
+                      </p>
+                      {viewingVotersSong.voters.map((voter, index) => (
+                        <div
+                          key={voter.uid + '-' + index}
+                          className="flex items-center gap-2 bg-slate-950/50 border border-slate-850 p-2 rounded-xl text-left"
+                        >
+                          <div className="w-6 h-6 rounded-full bg-slate-900 border border-slate-800 text-brand-yellow flex items-center justify-center font-black text-[10px]">
+                            {voter.displayName.charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold text-white truncate leading-tight">
+                              {voter.displayName}
+                            </p>
+                            {voter.email && (
+                              <p className="text-[9px] text-slate-400 truncate leading-none mt-0.5">
+                                {voter.email}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-[8px] font-medium text-slate-500 bg-slate-900 border border-slate-800 px-1 py-0.5 rounded flex items-center gap-0.5">
+                            <span className="h-1 w-1 rounded-full bg-emerald-400" />
+                            <span>Signed</span>
+                          </span>
+                        </div>
+                      ))}
                     </div>
-                  </button>
+                  )}
                 </div>
 
-                <div className="text-[10px] text-slate-500 text-center leading-tight">
-                  Clicking switch instantly simulates a new auth state!
+                <div className="pt-1.5">
+                  <button
+                    onClick={() => setViewingVotersSong(null)}
+                    className="w-full py-2 px-4 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-extrabold text-xs uppercase cursor-pointer transition text-center"
+                    type="button"
+                  >
+                    Close Roster
+                  </button>
                 </div>
               </div>
             </motion.div>

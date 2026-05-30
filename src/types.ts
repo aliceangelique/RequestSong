@@ -22,6 +22,7 @@ export interface SongRequest {
   youtubeUrl?: string;
   timestamp?: string;
   eventId?: string; // Links song requests to a specific event
+  voters?: { uid: string; displayName: string; email?: string }[];
 }
 
 export interface Vote {
