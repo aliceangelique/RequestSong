@@ -266,7 +266,7 @@ export default function App() {
   // Upvoted IDs cache (device specific to prevent infinite ballot box stuffing)
   const [votedSongIds, setVotedSongIds] = useState<string[]>([]);
 
-  // Computed current user derived from either live Firebase context or offline simulation mode
+  // Computed current user derived from live Firebase context
   const currentUser = useMemo(() => {
     if (isFirebaseConfigured && firebaseUser) {
       return {
@@ -277,22 +277,12 @@ export default function App() {
         isSimulated: false
       };
     }
-    if (offlineUser) {
-      return {
-        ...offlineUser,
-        isSimulated: true
-      };
-    }
     return null;
-  }, [firebaseUser, offlineUser]);
+  }, [firebaseUser]);
 
   // Admin identity check (specifically Digimon.Angelique@gmail.com specified by user context)
   const isAdmin = useMemo(() => {
     if (!currentUser) return false;
-    // Secure guardrail: if Firebase/Firestore config is active, only a real Google authenticated account can be admin
-    if (isFirebaseConfigured && currentUser.isSimulated) {
-      return false;
-    }
     return currentUser.email?.toLowerCase() === 'digimon.angelique@gmail.com';
   }, [currentUser]);
 
@@ -329,25 +319,9 @@ export default function App() {
     localStorage.setItem(`rpd_votes_${currentUser.uid}`, JSON.stringify(updated));
   };
 
-  // Setup simulation default user immediately for seamless offline workspace interaction
+  // Listen to authenticating Firebase session state updates on startup
   useEffect(() => {
     if (!db || !isFirebaseConfigured || !auth) {
-      const savedUser = localStorage.getItem('rpd_simulated_user');
-      if (savedUser) {
-        try {
-          setOfflineUser(JSON.parse(savedUser));
-        } catch {
-          setOfflineUser(null);
-        }
-      } else {
-        const defaultUser = {
-          uid: 'user_dancer',
-          displayName: 'Sunny Dancer',
-          email: 'dancer@prideflow.org'
-        };
-        setOfflineUser(defaultUser);
-        localStorage.setItem('rpd_simulated_user', JSON.stringify(defaultUser));
-      }
       setAuthLoading(false);
       return;
     }
@@ -442,8 +416,27 @@ export default function App() {
             instagramUrl: data.instagramUrl || ''
           });
         });
-        if (list.length > 0) {
-          const sortedList = list.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+        
+        // Merge offline-created local events so simulated and sandbox users see their creation instantly
+        const savedOffline = localStorage.getItem('rpd_offline_dance_events');
+        let combined = [...list];
+        if (savedOffline) {
+          try {
+            const parsedOffline = JSON.parse(savedOffline) as DanceEvent[];
+            if (Array.isArray(parsedOffline)) {
+              parsedOffline.forEach((offEv) => {
+                if (!combined.some((onEv) => onEv.id === offEv.id)) {
+                  combined.push(offEv);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn("Error merging offline reference events.", e);
+          }
+        }
+
+        if (combined.length > 0) {
+          const sortedList = combined.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
           setEvents(sortedList);
           // Set active event if not set or invalid
           setSelectedEventId((prev) => {
@@ -522,7 +515,26 @@ export default function App() {
             eventId: data.eventId || 'event_1'
           });
         });
-        setRequests(list);
+
+        // Merge offline/simulated user requests mock cache
+        const savedOffline = localStorage.getItem('rpd_offline_song_requests');
+        let combined = [...list];
+        if (savedOffline) {
+          try {
+            const parsedOffline = JSON.parse(savedOffline) as SongRequest[];
+            if (Array.isArray(parsedOffline)) {
+              parsedOffline.forEach((offReq) => {
+                if (!combined.some((onReq) => onReq.id === offReq.id)) {
+                  combined.push(offReq);
+                }
+              });
+            }
+          } catch (e) {
+            console.warn("Error merging offline reference song requests.", e);
+          }
+        }
+
+        setRequests(combined);
         setLoading(false);
       },
       (error) => {
@@ -553,18 +565,10 @@ export default function App() {
       try {
         await signInWithGoogle();
       } catch (err) {
-        console.warn("Popup blocked, utilizing simple account switcher simulation.", err);
-        setShowRoleSelector(true);
+        console.error("Popup login failed:", err);
+        alert("Google Access Pop-up block detected or connection is currently offline. Please allow popups on this browser tab and try again!");
       }
-    } else {
-      setShowRoleSelector(true);
     }
-  };
-
-  const handleSimulatedProfileSwitch = (profile: { uid: string; displayName: string; email: string }) => {
-    setOfflineUser(profile);
-    localStorage.setItem('rpd_simulated_user', JSON.stringify(profile));
-    setShowRoleSelector(false);
   };
 
   const triggerSignOutFlow = async () => {
@@ -575,8 +579,6 @@ export default function App() {
         console.error("Signout failed:", err);
       }
     }
-    setOfflineUser(null);
-    localStorage.removeItem('rpd_simulated_user');
   };
 
   // Upvote Action Core
@@ -708,13 +710,14 @@ export default function App() {
     }
   };
 
-  // Case-insensitive duplicate check to convert repeats to votes organically
-  const checkDuplicateSong = (title: string, artist: string) => {
+  // Case-insensitive duplicate check to convert repeats to votes organically scoped per event
+  const checkDuplicateSong = (title: string, artist: string, targetEventId = effectiveEventId) => {
     const cleanTitle = title.trim().toLowerCase();
     const cleanArtist = artist.trim().toLowerCase();
 
     return requests.find(
       (r) =>
+        (r.eventId || 'event_1') === targetEventId &&
         r.title.toLowerCase() === cleanTitle &&
         r.artist.toLowerCase() === cleanArtist &&
         r.status !== 'rejected'
@@ -974,16 +977,21 @@ export default function App() {
       createdAt: { seconds: Math.floor(Date.now() / 1000) }
     };
 
-    if (isFirebaseConfigured && db && !connectionError) {
+    if (isFirebaseConfigured && db && !connectionError && currentUser && !currentUser.isSimulated) {
       try {
         const eventDocRef = doc(db, 'danceEvents', eventId);
         await setDoc(eventDocRef, {
+          id: eventId,
           name: freshEvent.name,
           place: freshEvent.place,
           time: freshEvent.time,
           instagramUrl: freshEvent.instagramUrl || '',
           createdAt: serverTimestamp()
         });
+        
+        // Also persist locally in offline list as a safeguard
+        const nextEvents = [freshEvent, ...events];
+        localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
       } catch (err) {
         console.warn("Failed syncing new event to Firebase, saving offline.", err);
         const nextEvents = [freshEvent, ...events];
@@ -1054,7 +1062,7 @@ export default function App() {
     const pickSong = SONGS[Math.floor(Math.random() * SONGS.length)];
     const pickDancer = DANCERS[Math.floor(Math.random() * DANCERS.length)];
 
-    const duplicate = checkDuplicateSong(pickSong.title, pickSong.artist);
+    const duplicate = checkDuplicateSong(pickSong.title, pickSong.artist, effectiveEventId);
     if (duplicate) {
       handleSongUpvoteAction(duplicate.id);
       return;
@@ -1191,6 +1199,86 @@ export default function App() {
     // Sort groups dynamically: first groups with more requests, then alphabetically by name
     return groups.sort((a, b) => b.songs.length - a.songs.length || a.creatorName.localeCompare(b.creatorName));
   }, [queryFilteredRequests]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col items-center justify-center font-sans antialiased" id="rpd-loading">
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982] absolute top-0 left-0" />
+        <div className="flex flex-col items-center space-y-4">
+          <div className="w-12 h-12 rounded-full border-4 border-slate-800 border-t-brand-yellow animate-spin" />
+          <p className="text-xs font-bold text-slate-400 tracking-widest uppercase">Loading Bangkok Random Dance...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased relative overflow-hidden" id="rpd-login-gate">
+        {/* Pride Header Ribbon */}
+        <div className="h-1.5 w-full bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982] opacity-90 absolute top-0 left-0" aria-hidden="true" />
+
+        <div className="flex-1 flex flex-col items-center justify-center p-4 z-10 relative">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="bg-slate-900 border-2 border-brand-yellow/30 max-w-sm w-full rounded-3xl overflow-hidden shadow-2xl relative p-6 space-y-6 text-center"
+          >
+            {/* Soft decorative background glow */}
+            <div className="absolute -top-12 -left-12 w-32 h-32 bg-brand-yellow/10 rounded-full blur-3xl pointer-events-none" />
+            <div className="absolute -bottom-12 -right-12 w-32 h-32 bg-[#004CFF]/10 rounded-full blur-3xl pointer-events-none" />
+
+            {/* Logo area */}
+            <div className="flex justify-center">
+              <div className="h-16 w-16 rounded-2xl bg-brand-yellow p-0.5 flex items-center justify-center shadow-lg shadow-brand-yellow/20">
+                <div className="bg-slate-950 rounded-[14px] w-full h-full flex items-center justify-center">
+                  <Music className="w-8 h-8 text-brand-yellow" />
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h1 className="text-xl font-black text-white uppercase tracking-tight leading-none">
+                Bangkok Random Dance
+              </h1>
+              <p className="text-xs font-black text-brand-yellow uppercase tracking-widest">
+                Song Request Portal
+              </p>
+              <div className="h-0.5 w-16 bg-brand-yellow/30 mx-auto mt-3" />
+            </div>
+
+            <div className="space-y-4 col-span-1">
+              <p className="text-xs text-slate-350 leading-relaxed max-w-xs mx-auto">
+                ยินดีต้อนรับสู่ระบบขอเพลงสำหรับ Bangkok Random Dance! ร่วมแนะนำเพลงและลงคะแนนโหวตให้กับเพลงโปรดของคุณ เพื่อหน้างานที่สนุกและเป็นระเบียบเรียบร้อยสูงสุด กรุณาเข้าสู่ระบบก่อนใช้งาน
+              </p>
+              <p className="text-[10px] text-slate-500 italic max-w-xs mx-auto">
+                Welcome to Bangkok Random Dance. This portal keeps our song requests organized and dynamic. Please sign in below to continue.
+              </p>
+            </div>
+
+            <div className="pt-2">
+              <button
+                onClick={triggerGoogleSignInFlow}
+                className="w-full py-3.5 px-4 rounded-2xl bg-brand-yellow text-slate-950 hover:brightness-110 active:scale-98 transition font-black text-xs uppercase flex items-center justify-center gap-2.5 shadow-lg shadow-brand-yellow/20 cursor-pointer"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>Sign In with Google</span>
+              </button>
+            </div>
+
+            <div className="text-[9px] text-slate-500 font-medium">
+              Secured with Google Cloud Identity • SafeSpace Community
+            </div>
+          </motion.div>
+        </div>
+
+        {/* Brand visual watermark footer */}
+        <div className="py-4 px-4 text-center text-[10px] text-slate-600 z-10">
+          Bangkok Random Dance • For work contact 094-9422597 K.Mind
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans antialiased selection:bg-brand-yellow selection:text-slate-950" id="rpd-app-root">
