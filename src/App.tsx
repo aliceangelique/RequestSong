@@ -1146,7 +1146,7 @@ export default function App() {
           <span className="inline-flex h-3.5 w-5 rounded overflow-hidden flex-shrink-0 bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982]" title="LGBTQIA+ Community Support Pride Banner" />
           <span className="text-slate-350 font-bold flex items-center gap-1">
             <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow animate-pulse" />
-            Bangkok Random Dance's Song request system
+            Bangkok Random Dance
           </span>
         </div>
 
