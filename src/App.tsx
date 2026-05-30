@@ -46,6 +46,8 @@ import {
   auth,
   isFirebaseConfigured,
   signInWithGoogle,
+  signInWithGoogleRedirect,
+  getGoogleRedirectResult,
   handleSignOut
 } from './firebase';
 import { SongRequest, DanceEvent } from './types';
@@ -326,6 +328,17 @@ export default function App() {
       return;
     }
 
+    // Check if user is returning from a Google redirect login
+    getGoogleRedirectResult()
+      .then((usr) => {
+        if (usr) {
+          setFirebaseUser(usr);
+        }
+      })
+      .catch((err) => {
+        console.error("Error retrieving redirect result:", err);
+      });
+
     const unsubscribe = onAuthStateChanged(auth, (usr) => {
       setFirebaseUser(usr);
       setAuthLoading(false);
@@ -562,11 +575,30 @@ export default function App() {
   // Auth Handlers
   const triggerGoogleSignInFlow = async () => {
     if (isFirebaseConfigured && auth) {
+      // Detect in-app webviews like Instagram, LINE, Facebook, WeChat
+      const ua = navigator.userAgent || navigator.vendor || '';
+      const isInAppBrowser = /FBAN|FBAV|Instagram|Line|MicroMessenger|WhatsApp|wv/i.test(ua);
+
+      if (isInAppBrowser) {
+        try {
+          await signInWithGoogleRedirect();
+        } catch (err) {
+          console.error("Direct redirect flow failed:", err);
+          alert("Failed to open login redirect. If you are inside an in-app browser, please click the triple dot menu (...) in the corner and select 'Open in Chrome/Safari'.");
+        }
+        return;
+      }
+
       try {
         await signInWithGoogle();
       } catch (err) {
-        console.error("Popup login failed:", err);
-        alert("Google Access Pop-up block detected or connection is currently offline. Please allow popups on this browser tab and try again!");
+        console.warn("Popup login blocked or failed. Falling back to Redirect Sign-In...", err);
+        try {
+          await signInWithGoogleRedirect();
+        } catch (redirErr) {
+          console.error("Redirect fallback failed:", redirErr);
+          alert("Could not initialize authentication. Please allow popups/redirects and check your internet connection.");
+        }
       }
     }
   };

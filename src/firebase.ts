@@ -1,5 +1,5 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -85,6 +85,35 @@ export async function signInWithGoogle() {
     return result.user;
   } catch (error) {
     console.error('Google Sign-In failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sign in helper utilizing redirect login for webviews and popup-restricted environments
+ */
+export async function signInWithGoogleRedirect() {
+  if (!auth) {
+    throw new Error('Firebase Auth is not initialized. Check your configurations.');
+  }
+  try {
+    await signInWithRedirect(auth, googleProvider);
+  } catch (error) {
+    console.error('Google Redirect Sign-In failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Helper to fetch redirect results on page reload
+ */
+export async function getGoogleRedirectResult() {
+  if (!auth) return null;
+  try {
+    const result = await getRedirectResult(auth);
+    return result?.user || null;
+  } catch (error) {
+    console.error('Google Redirect Retrieval failed:', error);
     throw error;
   }
 }
