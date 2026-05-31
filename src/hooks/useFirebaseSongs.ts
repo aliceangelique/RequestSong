@@ -197,7 +197,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
     const songRef = doc(db, 'songRequests', requestId);
     const voteRef = doc(db, 'songRequests', requestId, 'votes', currentUser.uid);
 
-    const freshRequest = {
+    const freshRequest: any = {
       id: requestId,
       title: trimmedTitle,
       artist: trimmedArtist,
@@ -208,9 +208,6 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
       updatedAt: serverTimestamp(),
       status: 'pending',
       votesCount: 1,
-      dancePart: dancePart !== 'none' ? dancePart : undefined,
-      youtubeUrl: trimmedYoutube || undefined,
-      timestamp: trimmedTimestamp || undefined,
       eventId: effectiveEventId,
       voters: [{
         uid: currentUser.uid,
@@ -218,6 +215,16 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
         email: currentUser.email || ''
       }]
     };
+
+    if (dancePart && dancePart !== 'none') {
+      freshRequest.dancePart = dancePart;
+    }
+    if (trimmedYoutube) {
+      freshRequest.youtubeUrl = trimmedYoutube;
+    }
+    if (trimmedTimestamp) {
+      freshRequest.timestamp = trimmedTimestamp;
+    }
 
     batch.set(songRef, freshRequest);
     batch.set(voteRef, {

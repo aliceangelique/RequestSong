@@ -1542,7 +1542,7 @@ export default function App() {
                             YouTube Video Link
                           </label>
                           <input
-                            type="url"
+                            type="text"
                             value={youtubeUrl}
                             onChange={(e) => setYoutubeUrl(e.target.value)}
                             placeholder="https://www.youtube.com/watch?v=..."
