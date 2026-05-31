@@ -1,5 +1,5 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut, signInAnonymously } from 'firebase/auth';
 import { initializeFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -147,6 +147,22 @@ export async function handleSignOut() {
     await signOut(auth);
   } catch (error) {
     console.error('Sign-Out failed:', error);
+    throw error;
+  }
+}
+
+/**
+ * Sign in anonymously for standard guest visitors
+ */
+export async function signInGuest() {
+  if (!auth) {
+    throw new Error('Firebase Auth is not initialized. Check your configurations.');
+  }
+  try {
+    const result = await signInAnonymously(auth);
+    return result.user;
+  } catch (error) {
+    console.error('Anonymous Sign-In failed:', error);
     throw error;
   }
 }

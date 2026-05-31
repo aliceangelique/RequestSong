@@ -73,8 +73,8 @@ service cloud.firestore {
     // --- Core Match Rules ---
 
     match /songRequests/{requestId} {
-      // Standard users and guests who are logged in can scan the queue/leaderboard
-      allow read, list: if isSignedIn();
+      // Standard users and guests can scan the queue/leaderboard publicly
+      allow read, list: if true;
 
       // Deleting a request from the queue is strictly restricted to administrative control
       allow delete: if isAdmin();
@@ -86,7 +86,10 @@ service cloud.firestore {
         && incoming().id == requestId
         && isValidSongRequest(incoming())
         && incoming().creatorId == request.auth.uid
-        && incoming().creatorEmail == request.auth.token.email
+        && (
+          (!('email' in request.auth.token) && incoming().creatorEmail == "anonymous@randomdance.net")
+          || ('email' in request.auth.token && incoming().creatorEmail == request.auth.token.email)
+        )
         && incoming().status == "pending"
         && incoming().votesCount == 1
         && request.resource.data.createdAt == request.time
@@ -126,8 +129,8 @@ service cloud.firestore {
 
       // --- Vote Subcollection ---
       match /votes/{userId} {
-        // Authenticated users can list/read votes (needed to verify if voter already upvoted)
-        allow read, list: if isSignedIn();
+        // Anyone can read/list votes to keep device counts client-synced
+        allow read, list: if true;
 
         // Any verified user can create their own vote doc, but only if they are the authenticated userId 
         // and the parent request exists.
@@ -150,7 +153,7 @@ service cloud.firestore {
     }
 
     match /danceEvents/{eventId} {
-      allow read, list: if isSignedIn();
+      allow read, list: if true;
       allow create, update: if (
         isVerified()
         && isAdmin()
@@ -162,7 +165,7 @@ service cloud.firestore {
     }
 
     match /settings/{settingId} {
-      allow read, list: if isSignedIn();
+      allow read, list: if true;
       allow create, update: if (
         isVerified()
         && isAdmin()

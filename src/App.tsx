@@ -50,6 +50,7 @@ import {
   signInWithGoogle,
   signInWithGoogleRedirect,
   getGoogleRedirectResult,
+  signInGuest,
   handleSignOut,
   handleFirestoreError,
   OperationType
@@ -270,12 +271,14 @@ export default function App() {
   // Computed current user derived from live Firebase context
   const currentUser = useMemo(() => {
     if (isFirebaseConfigured && firebaseUser) {
+      const isAnon = firebaseUser.isAnonymous || !firebaseUser.email;
       return {
         uid: firebaseUser.uid,
         displayName: firebaseUser.displayName || 'Anonymous Dancer',
-        email: firebaseUser.email || 'dancer@randomdance.net',
+        email: isAnon ? 'anonymous@randomdance.net' : firebaseUser.email,
         photoURL: firebaseUser.photoURL || undefined,
-        isSimulated: false
+        isSimulated: false,
+        isAnonymous: isAnon
       };
     }
     return null;
@@ -312,6 +315,24 @@ export default function App() {
     }
   }, [currentUser]);
 
+  // Synchronize local upvoted state with the actual voters list from Firestore
+  useEffect(() => {
+    if (!currentUser) return;
+    const dbVotedIds = requests
+      .filter((r) => r.voters && r.voters.some((v) => v.uid === currentUser.uid))
+      .map((r) => r.id);
+    
+    if (dbVotedIds.length > 0) {
+      setVotedSongIds((prev) => {
+        const union = Array.from(new Set([...prev, ...dbVotedIds]));
+        if (union.length !== prev.length || union.some((v, i) => prev[i] !== v)) {
+          return union;
+        }
+        return prev;
+      });
+    }
+  }, [requests, currentUser]);
+
   // Append upvote locally to avoid multiple redundant database hits
   const recordVoteInLocalCache = (songId: string) => {
     if (!currentUser) return;
@@ -340,8 +361,20 @@ export default function App() {
       });
 
     const unsubscribe = onAuthStateChanged(auth, (usr) => {
-      setFirebaseUser(usr);
-      setAuthLoading(false);
+      if (usr) {
+        setFirebaseUser(usr);
+        setAuthLoading(false);
+      } else {
+        // Automatically sign in as an anonymous guest visitor to ensure database connectivity across devices
+        signInGuest()
+          .then((guestUser) => {
+            setFirebaseUser(guestUser);
+          })
+          .catch((err) => {
+            console.error("Failed anonymous guest sign-in:", err);
+            setAuthLoading(false);
+          });
+      }
     });
     return () => unsubscribe();
   }, []);
