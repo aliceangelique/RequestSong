@@ -3,22 +3,38 @@ import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRe
 import { initializeFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
-// Safe checking if Firebase is fully provisioned
-export const isFirebaseConfigured = !!(
+// Safe checking if Firebase is fully provisioned inside AI Studio
+const isAppletConfigured = !!(
   firebaseConfig &&
   firebaseConfig.apiKey &&
   firebaseConfig.projectId
 );
 
-const app = isFirebaseConfigured
-  ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
+// Fallback configuration for external environments (GitHub, local development, Vercel, Netlify)
+const githubConfig = {
+  apiKey: "AIzaSyCzqUUcXTgeCgG8GdRnF5dDXkmm41-0mmA",
+  authDomain: "grounded-brace-3tn3v.firebaseapp.com",
+  databaseURL: "https://grounded-brace-3tn3v-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "grounded-brace-3tn3v",
+  storageBucket: "grounded-brace-3tn3v.firebasestorage.app",
+  messagingSenderId: "179943042801",
+  appId: "1:179943042801:web:98bc10962b0fdda107c350",
+  firestoreDatabaseId: "(default)"
+};
+
+export const isFirebaseConfigured = isAppletConfigured || true;
+
+const activeConfig = isAppletConfigured ? firebaseConfig : githubConfig;
+
+const app = activeConfig
+  ? (getApps().length === 0 ? initializeApp(activeConfig) : getApp())
   : null;
 
 // Initialize exports safely with experimentalForceLongPolling to handle proxy/iframe/sandbox WS blockers
 export const db = app
   ? initializeFirestore(app, {
       experimentalForceLongPolling: true,
-    }, firebaseConfig.firestoreDatabaseId || '(default)')
+    }, activeConfig?.firestoreDatabaseId || '(default)')
   : null;
 export const auth = app ? getAuth(app) : null;
 export const googleProvider = new GoogleAuthProvider();
