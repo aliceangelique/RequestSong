@@ -19,7 +19,7 @@ const githubConfig = {
   storageBucket: "grounded-brace-3tn3v.firebasestorage.app",
   messagingSenderId: "179943042801",
   appId: "1:179943042801:web:98bc10962b0fdda107c350",
-  firestoreDatabaseId: "(default)"
+  firestoreDatabaseId: "ai-studio-260a2747-db9f-45fe-b57a-5f90b977f773"
 };
 
 export const isFirebaseConfigured = isAppletConfigured || true;
