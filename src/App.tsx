@@ -10,7 +10,9 @@ import {
   deleteDoc,
   updateDoc,
   arrayUnion,
-  arrayRemove
+  arrayRemove,
+  query,
+  where
 } from 'firebase/firestore';
 import { onAuthStateChanged, User } from 'firebase/auth';
 import {
@@ -243,6 +245,14 @@ export default function App() {
 
   // Active View Mode ('user' for Dance Fans, 'organizer' for DJ Organizer / Admin)
   const [userRole, setUserRole] = useState<'user' | 'organizer'>('user');
+
+  // Find which event we should actually display/filter based on current viewer's role
+  const effectiveEventId = useMemo(() => {
+    if (userRole === 'user') {
+      return activeEventId;
+    }
+    return selectedEventId;
+  }, [userRole, activeEventId, selectedEventId]);
 
   // Input states for song request form
   const [newTitle, setNewTitle] = useState('');
@@ -522,17 +532,17 @@ export default function App() {
   useEffect(() => {
     if (!db || !isFirebaseConfigured) {
       setLoading(true);
-      const saved = localStorage.getItem('rpd_offline_song_requests');
+      const saved = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
       if (saved) {
         try {
           setRequests(JSON.parse(saved));
         } catch {
           setRequests(INITIAL_OFFLINE_SONGS);
-          localStorage.setItem('rpd_offline_song_requests', JSON.stringify(INITIAL_OFFLINE_SONGS));
+          localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(INITIAL_OFFLINE_SONGS));
         }
       } else {
         setRequests(INITIAL_OFFLINE_SONGS);
-        localStorage.setItem('rpd_offline_song_requests', JSON.stringify(INITIAL_OFFLINE_SONGS));
+        localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(INITIAL_OFFLINE_SONGS));
       }
       setLoading(false);
       return;
@@ -540,8 +550,11 @@ export default function App() {
 
     setLoading(true);
     const requestsRef = collection(db, 'songRequests');
+    // Multi-device Querying & Streaming: Dynamically filter song requests matching the current active event ID in real-time
+    const q = query(requestsRef, where('eventId', '==', effectiveEventId));
+
     const unsubscribe = onSnapshot(
-      requestsRef,
+      q,
       (snapshot) => {
         const list: SongRequest[] = [];
         snapshot.forEach((docSnap) => {
@@ -566,7 +579,7 @@ export default function App() {
         });
 
         // Merge offline/simulated user requests mock cache
-        const savedOffline = localStorage.getItem('rpd_offline_song_requests');
+        const savedOffline = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
         let combined = [...list];
         if (savedOffline) {
           try {
@@ -587,26 +600,30 @@ export default function App() {
         setLoading(false);
       },
       (error) => {
-        console.warn("Firestore access restricted, switching directly to local persistent sandbox storage.");
+        console.warn("Firestore access restricted, switching directly to local persistent sandbox storage.", error);
         setConnectionError(true);
-        const saved = localStorage.getItem('rpd_offline_song_requests');
+        const saved = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
         if (saved) {
-          setRequests(JSON.parse(saved));
+          try {
+            setRequests(JSON.parse(saved));
+          } catch {
+            setRequests(INITIAL_OFFLINE_SONGS);
+          }
         } else {
           setRequests(INITIAL_OFFLINE_SONGS);
         }
         setLoading(false);
-        handleFirestoreError(error, OperationType.LIST, 'songRequests');
+        handleFirestoreError(error, OperationType.LIST, `songRequests?eventId=${effectiveEventId}`);
       }
     );
 
     return () => unsubscribe();
-  }, []);
+  }, [effectiveEventId]);
 
   // Save requests offline safely
   const persistOfflineDataUpdated = (newList: SongRequest[]) => {
     setRequests(newList);
-    localStorage.setItem('rpd_offline_song_requests', JSON.stringify(newList));
+    localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(newList));
   };
 
   // Auth Handlers
@@ -1111,7 +1128,7 @@ export default function App() {
       setEvents([freshEvent]);
       setRequests([]);
       localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
-      localStorage.removeItem('rpd_offline_song_requests');
+      localStorage.removeItem(`rpd_offline_song_requests_${eventId}`);
       localStorage.setItem('rpd_active_event_id', eventId);
       setActiveEventId(eventId);
       setSelectedEventId(eventId);
@@ -1288,14 +1305,6 @@ export default function App() {
     const nextList = [simRequest, ...requests];
     persistOfflineDataUpdated(nextList);
   };
-
-  // Find which event we should actually display/filter based on current viewer's role
-  const effectiveEventId = useMemo(() => {
-    if (userRole === 'user') {
-      return activeEventId;
-    }
-    return selectedEventId;
-  }, [userRole, activeEventId, selectedEventId]);
 
   // Filter requests by current effective event before calculating rankings
   const eventSubsetRequests = useMemo(() => {
