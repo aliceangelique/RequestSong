@@ -14,11 +14,13 @@ service cloud.firestore {
     }
 
     function isVerified() {
-      return isSignedIn() && request.auth.token.email_verified == true;
+      return isSignedIn() && (!('email_verified' in request.auth.token) || request.auth.token.email_verified == true);
     }
 
     function isAdmin() {
-      return isVerified() && request.auth.token.email == "Digimon.Angelique@gmail.com";
+      return isVerified() 
+        && (request.auth.token.email == "Digimon.Angelique@gmail.com" 
+            || request.auth.token.email.lower() == "digimon.angelique@gmail.com");
     }
 
     function isValidId(id) {

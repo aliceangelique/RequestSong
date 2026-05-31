@@ -1027,6 +1027,8 @@ export default function App() {
       createdAt: { seconds: Math.floor(Date.now() / 1000) }
     };
 
+    let didSucceed = true;
+
     // Firebase reset active events and requests first to support "We no need history / Replace with new and delete old one"
     if (isFirebaseConfigured && db && !connectionError && currentUser && !currentUser.isSimulated) {
       try {
@@ -1063,27 +1065,34 @@ export default function App() {
       } catch (err) {
         console.warn("Failed database reset/overwrite via Firebase, falling back to clean local database overwrite.", err);
         handleFirestoreError(err, OperationType.WRITE, `danceEvents/${eventId}`);
+        didSucceed = false;
+
+        const errMsg = err instanceof Error ? err.message : String(err);
+        alert(`Failed to create online event on Firebase:\n${errMsg}\n\nPlease verify that you are logged in using our admin credentials (digimon.angelique@gmail.com).`);
+        return;
       }
     }
 
-    // Overwrite local memory states entirely to support "We no need history and focus on single active event"
-    setEvents([freshEvent]);
-    setRequests([]);
-    localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
-    localStorage.removeItem('rpd_offline_song_requests');
-    localStorage.setItem('rpd_active_event_id', eventId);
-    setActiveEventId(eventId);
-    setSelectedEventId(eventId);
+    if (didSucceed) {
+      // Overwrite local memory states entirely to support "We no need history and focus on single active event"
+      setEvents([freshEvent]);
+      setRequests([]);
+      localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
+      localStorage.removeItem('rpd_offline_song_requests');
+      localStorage.setItem('rpd_active_event_id', eventId);
+      setActiveEventId(eventId);
+      setSelectedEventId(eventId);
 
-    setNewEventName('');
-    setNewEventPlace('');
-    setNewEventTime('');
-    setNewEventDate('');
-    setNewEventStartTime('');
-    setNewEventEndTime('');
-    setNewEventInstagramUrl('');
-    setEventSuccess(true);
-    setTimeout(() => setEventSuccess(false), 4500);
+      setNewEventName('');
+      setNewEventPlace('');
+      setNewEventTime('');
+      setNewEventDate('');
+      setNewEventStartTime('');
+      setNewEventEndTime('');
+      setNewEventInstagramUrl('');
+      setEventSuccess(true);
+      setTimeout(() => setEventSuccess(false), 4500);
+    }
   };
 
   // Synchronize active event globally (Admins only)
