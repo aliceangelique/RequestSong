@@ -1739,6 +1739,125 @@ export default function App() {
                       .filter(r => r.status !== 'rejected')
                       .map((req, index) => {
                         const hasVoted = votedSongIds.includes(req.id);
+                        const isTop1 = index === 0;
+                        const isTop2 = index === 1;
+                        const isTop3 = index === 2;
+
+                        const cardContent = (
+                          <div className="flex items-start gap-3 truncate w-full">
+                            {/* Position */}
+                            {isTop1 ? (
+                              <div className="mt-0.5 flex-shrink-0 font-mono text-[10px] font-black w-6 h-6 rounded-lg bg-gradient-to-br from-yellow-300 via-amber-400 to-yellow-600 border border-amber-200 flex items-center justify-center text-slate-950 shadow shadow-amber-400/50 animate-bounce" title="Rank #1 (Champion)">
+                                #1
+                              </div>
+                            ) : isTop2 ? (
+                              <div className="mt-0.5 flex-shrink-0 font-mono text-[10px] font-black w-6 h-6 rounded-lg bg-gradient-to-br from-slate-100 via-slate-300 to-slate-500 border border-slate-200 flex items-center justify-center text-slate-950 shadow" title="Rank #2 (Silver)">
+                                #2
+                              </div>
+                            ) : isTop3 ? (
+                              <div className="mt-0.5 flex-shrink-0 font-mono text-[10px] font-black w-6 h-6 rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 border border-amber-500 flex items-center justify-center text-white shadow" title="Rank #3 (Bronze)">
+                                #3
+                              </div>
+                            ) : (
+                              <div className="mt-0.5 flex-shrink-0 font-mono text-[11px] font-black w-6 h-6 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-400">
+                                #{index + 1}
+                              </div>
+                            )}
+
+                            <div className="truncate flex-1">
+                              <div className="flex flex-wrap items-center gap-2 mb-1">
+                                <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-yellow-400 transition truncate max-w-sm">
+                                  {req.title}
+                                </h4>
+                                {req.dancePart && req.dancePart !== 'none' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-black bg-brand-yellow text-slate-950 rounded uppercase shadow shadow-brand-yellow/50">
+                                    🎯 {req.dancePart}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-[11px] text-slate-350 font-medium truncate">
+                                {req.artist}
+                              </p>
+
+                              {/* Dynamic badges */}
+                              <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                                {req.youtubeUrl && (
+                                  <a
+                                    href={req.youtubeUrl}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-550/20"
+                                    title="Open YouTube video"
+                                    onClick={(e) => e.stopPropagation()}
+                                  >
+                                    <Link className="w-2.5 h-2.5" />
+                                    <span>YouTube Link</span>
+                                    {req.timestamp && <span className="text-slate-500 ml-0.5">({req.timestamp})</span>}
+                                  </a>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+
+                        const voteButton = (
+                          <div className="flex-shrink-0 min-w-[70px] text-right z-10">
+                            {hasVoted ? (
+                              <button
+                                onClick={() => handleSongUnvoteAction(req.id)}
+                                className="group/voted px-3 py-1.5 rounded-lg bg-slate-950 border border-brand-yellow/30 text-brand-yellow text-xs transition duration-200 cursor-pointer flex flex-col items-center justify-center min-w-[75px] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 w-full"
+                                title="Unvote this track (Click to withdraw your vote)"
+                                type="button"
+                              >
+                                <span className="flex items-center gap-1 font-black">
+                                  <Check className="w-3.5 h-3.5 block group-hover/voted:hidden text-brand-yellow" />
+                                  <X className="w-3.5 h-3.5 hidden group-hover/voted:block text-red-400" />
+                                  <span>{req.votesCount}</span>
+                                </span>
+                                <span className="text-[8px] font-black uppercase mt-0.5 block group-hover/voted:hidden text-brand-yellow/70">Voted</span>
+                                <span className="text-[8px] font-black uppercase mt-0.5 hidden group-hover/voted:block text-red-400/80">Unvote</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleSongUpvoteAction(req.id)}
+                                className="px-3 py-1.5 rounded-lg bg-brand-yellow hover:scale-105 active:scale-95 text-slate-950 font-black text-xs transition cursor-pointer flex items-center gap-1 justify-center w-full shadow-sm shadow-brand-yellow/10"
+                                title="Add upvote to this track recommendation"
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                                <span>{req.votesCount}</span>
+                              </button>
+                            )}
+                          </div>
+                        );
+
+                        if (isTop1) {
+                          return (
+                            <div key={req.id} className="p-[2.5px] rounded-xl bg-gradient-to-r from-pink-500 via-amber-400 via-teal-400 via-indigo-500 to-pink-500 bg-[length:200%_auto] animate-pulse shadow-[0_0_15px_rgba(236,72,153,0.25)]">
+                              <div className="group bg-slate-900 p-4 rounded-[10px] flex items-center justify-between gap-3 text-left w-full hover:bg-slate-900/90 transition-all">
+                                {cardContent}
+                                {voteButton}
+                              </div>
+                            </div>
+                          );
+                        } else if (isTop2) {
+                          return (
+                            <div key={req.id} className="p-[1.5px] rounded-xl bg-gradient-to-r from-amber-400 via-orange-400 via-rose-500 to-indigo-500 shadow-[0_0_11px_rgba(245,158,11,0.18)]">
+                              <div className="group bg-slate-900 p-4 rounded-[10.5px] flex items-center justify-between gap-3 text-left w-full hover:bg-slate-900/90 transition-all">
+                                {cardContent}
+                                {voteButton}
+                              </div>
+                            </div>
+                          );
+                        } else if (isTop3) {
+                          return (
+                            <div key={req.id} className="p-[1px] rounded-xl bg-gradient-to-r from-blue-400 via-teal-400 to-emerald-400 shadow-[0_0_8px_rgba(56,189,248,0.12)]">
+                              <div className="group bg-slate-900 p-4 rounded-[11px] flex items-center justify-between gap-3 text-left w-full hover:bg-slate-900/90 transition-all">
+                                {cardContent}
+                                {voteButton}
+                              </div>
+                            </div>
+                          );
+                        }
 
                         return (
                           <div
@@ -1746,92 +1865,8 @@ export default function App() {
                             className="group bg-slate-900/70 p-4 rounded-xl border border-slate-800 hover:border-slate-700 transition-all flex items-center justify-between gap-3 text-left"
                             id={`request-${req.id}`}
                           >
-                            <div className="flex items-start gap-3 truncate">
-                              {/* Position */}
-                              <div className="mt-0.5 flex-shrink-0 font-mono text-[11px] font-black w-6 h-6 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center text-slate-400">
-                                #{index + 1}
-                              </div>
-
-                              <div className="truncate">
-                                <div className="flex flex-wrap items-center gap-2 mb-1">
-                                  <h4 className="text-xs sm:text-sm font-bold text-white group-hover:text-yellow-400 transition truncate max-w-sm">
-                                    {req.title}
-                                  </h4>
-                                  {req.dancePart && req.dancePart !== 'none' && (
-                                    <span className="px-2 py-0.5 text-[9px] font-black bg-brand-yellow text-slate-950 rounded uppercase shadow shadow-brand-yellow/50">
-                                      🎯 {req.dancePart}
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="text-[11px] text-slate-350 font-medium truncate">
-                                  {req.artist}
-                                </p>
-
-                                {/* Dynamic badges */}
-                                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-slate-450 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-850 truncate max-w-[150px]">
-                                    <UserIcon className="w-2.5 h-2.5 text-yellow-500" />
-                                    <span className="truncate">By {req.creatorName}</span>
-                                  </span>
-
-                                  {req.voters && req.voters.length > 0 && (
-                                    <button
-                                      type="button"
-                                      onClick={() => setViewingVotersSong(req)}
-                                      className="inline-flex items-center gap-1 text-[9px] font-semibold text-slate-450 bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 transition cursor-pointer px-1.5 py-0.5 rounded truncate max-w-[170px]"
-                                      title="Click to see who voted for this track"
-                                    >
-                                      <ThumbsUp className="w-2.5 h-2.5 text-brand-yellow animate-pulse" />
-                                      <span className="truncate">{req.voters.map(v => v.displayName).join(', ')}</span>
-                                    </button>
-                                  )}
-
-                                  {req.youtubeUrl && (
-                                    <a
-                                      href={req.youtubeUrl}
-                                      target="_blank"
-                                      rel="noreferrer"
-                                      className="inline-flex items-center gap-0.5 text-[9px] font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-550/20"
-                                      title="Open YouTube video"
-                                      onClick={(e) => e.stopPropagation()}
-                                    >
-                                      <Link className="w-2.5 h-2.5" />
-                                      <span>YouTube Link</span>
-                                      {req.timestamp && <span className="text-slate-500 ml-0.5">({req.timestamp})</span>}
-                                    </a>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-
-                            {/* Votes tally / Button */}
-                            <div className="flex-shrink-0 min-w-[70px] text-right">
-                              {hasVoted ? (
-                                <button
-                                  onClick={() => handleSongUnvoteAction(req.id)}
-                                  className="group/voted px-3 py-1.5 rounded-lg bg-slate-950 border border-brand-yellow/30 text-brand-yellow text-xs transition duration-200 cursor-pointer flex flex-col items-center justify-center min-w-[75px] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 w-full"
-                                  title="Unvote this track (Click to withdraw your vote)"
-                                  type="button"
-                                >
-                                  <span className="flex items-center gap-1 font-black">
-                                    <Check className="w-3.5 h-3.5 block group-hover/voted:hidden text-brand-yellow" />
-                                    <X className="w-3.5 h-3.5 hidden group-hover/voted:block text-red-400" />
-                                    <span>{req.votesCount}</span>
-                                  </span>
-                                  <span className="text-[8px] font-black uppercase mt-0.5 block group-hover/voted:hidden text-brand-yellow/70">Voted</span>
-                                  <span className="text-[8px] font-black uppercase mt-0.5 hidden group-hover/voted:block text-red-400/80">Unvote</span>
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleSongUpvoteAction(req.id)}
-                                  className="px-3 py-1.5 rounded-lg bg-brand-yellow hover:scale-105 active:scale-95 text-slate-950 font-black text-xs transition cursor-pointer flex items-center gap-1 justify-center w-full shadow-sm shadow-brand-yellow/10"
-                                  title="Add upvote to this track recommendation"
-                                >
-                                  <ThumbsUp className="w-3 h-3" />
-                                  <span>{req.votesCount}</span>
-                                </button>
-                              )}
-                            </div>
+                            {cardContent}
+                            {voteButton}
                           </div>
                         );
                       })}
