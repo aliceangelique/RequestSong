@@ -58,6 +58,7 @@ import {
   OperationType
 } from './firebase';
 import { SongRequest, DanceEvent } from './types';
+import { useSongRequests } from './hooks/useSongRequests';
 
 // Pre-seeded starter events to support historical and new play spaces
 const INITIAL_OFFLINE_EVENTS: DanceEvent[] = [
@@ -221,13 +222,6 @@ export default function App() {
   const [isLoginAttempting, setIsLoginAttempting] = useState(false);
   const [viewingVotersSong, setViewingVotersSong] = useState<SongRequest | null>(null);
 
-  // Firestore connection status checker
-  const [connectionError, setConnectionError] = useState<boolean>(false);
-
-  // Requests state container
-  const [requests, setRequests] = useState<SongRequest[]>([]);
-  const [loading, setLoading] = useState(true);
-
   // Event State details
   const [events, setEvents] = useState<DanceEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('event_1');
@@ -275,9 +269,6 @@ export default function App() {
   // Organizer view mode: 'ranked' (default) or 'grouped' (grouped by requester)
   const [organizerViewMode, setOrganizerViewMode] = useState<'ranked' | 'grouped'>('ranked');
 
-  // Upvoted IDs cache (device specific to prevent infinite ballot box stuffing)
-  const [votedSongIds, setVotedSongIds] = useState<string[]>([]);
-
   // Computed current user derived from live Firebase context
   const currentUser = useMemo(() => {
     if (isFirebaseConfigured && firebaseUser) {
@@ -294,6 +285,23 @@ export default function App() {
     return null;
   }, [firebaseUser]);
 
+  // Hook for Firebase/offline song requests and upvoting
+  const {
+    requests,
+    loading,
+    connectionError,
+    votedSongIds,
+    upvoteSong,
+    unvoteSong,
+    submitSongRequest,
+    persistOfflineDataUpdated,
+    checkDuplicateSong
+  } = useSongRequests({
+    currentUser,
+    effectiveEventId,
+    initialSongs: INITIAL_OFFLINE_SONGS
+  });
+
   // Admin identity check (specifically Digimon.Angelique@gmail.com specified by user context)
   const isAdmin = useMemo(() => {
     if (!currentUser) return false;
@@ -306,50 +314,6 @@ export default function App() {
       setUserRole('user');
     }
   }, [isAdmin, userRole]);
-
-  // Load voter safe codes
-  useEffect(() => {
-    if (currentUser) {
-      const stored = localStorage.getItem(`rpd_votes_${currentUser.uid}`);
-      if (stored) {
-        try {
-          setVotedSongIds(JSON.parse(stored));
-        } catch {
-          setVotedSongIds([]);
-        }
-      } else {
-        setVotedSongIds([]);
-      }
-    } else {
-      setVotedSongIds([]);
-    }
-  }, [currentUser]);
-
-  // Synchronize local upvoted state with the actual voters list from Firestore
-  useEffect(() => {
-    if (!currentUser) return;
-    const dbVotedIds = requests
-      .filter((r) => r.voters && r.voters.some((v) => v.uid === currentUser.uid))
-      .map((r) => r.id);
-    
-    if (dbVotedIds.length > 0) {
-      setVotedSongIds((prev) => {
-        const union = Array.from(new Set([...prev, ...dbVotedIds]));
-        if (union.length !== prev.length || union.some((v, i) => prev[i] !== v)) {
-          return union;
-        }
-        return prev;
-      });
-    }
-  }, [requests, currentUser]);
-
-  // Append upvote locally to avoid multiple redundant database hits
-  const recordVoteInLocalCache = (songId: string) => {
-    if (!currentUser) return;
-    const updated = [...votedSongIds, songId];
-    setVotedSongIds(updated);
-    localStorage.setItem(`rpd_votes_${currentUser.uid}`, JSON.stringify(updated));
-  };
 
   // Listen to authenticating Firebase session state updates on startup
   useEffect(() => {
@@ -528,104 +492,6 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Listen for Firestore real-time updates with robust localStorage fallback
-  useEffect(() => {
-    if (!db || !isFirebaseConfigured) {
-      setLoading(true);
-      const saved = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
-      if (saved) {
-        try {
-          setRequests(JSON.parse(saved));
-        } catch {
-          setRequests(INITIAL_OFFLINE_SONGS);
-          localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(INITIAL_OFFLINE_SONGS));
-        }
-      } else {
-        setRequests(INITIAL_OFFLINE_SONGS);
-        localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(INITIAL_OFFLINE_SONGS));
-      }
-      setLoading(false);
-      return;
-    }
-
-    setLoading(true);
-    const requestsRef = collection(db, 'songRequests');
-    // Multi-device Querying & Streaming: Dynamically filter song requests matching the current active event ID in real-time
-    const q = query(requestsRef, where('eventId', '==', effectiveEventId));
-
-    const unsubscribe = onSnapshot(
-      q,
-      (snapshot) => {
-        const list: SongRequest[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
-          list.push({
-            id: docSnap.id,
-            title: data.title || '',
-            artist: data.artist || '',
-            creatorId: data.creatorId || '',
-            creatorName: data.creatorName || '',
-            creatorEmail: data.creatorEmail || '',
-            createdAt: data.createdAt,
-            updatedAt: data.updatedAt,
-            status: data.status || 'pending',
-            votesCount: data.votesCount || 0,
-            dancePart: data.dancePart || 'none',
-            youtubeUrl: data.youtubeUrl || '',
-            timestamp: data.timestamp || '',
-            eventId: data.eventId || 'event_1',
-            voters: data.voters || []
-          });
-        });
-
-        // Merge offline/simulated user requests mock cache
-        const savedOffline = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
-        let combined = [...list];
-        if (savedOffline) {
-          try {
-            const parsedOffline = JSON.parse(savedOffline) as SongRequest[];
-            if (Array.isArray(parsedOffline)) {
-              parsedOffline.forEach((offReq) => {
-                if (!combined.some((onReq) => onReq.id === offReq.id)) {
-                  combined.push(offReq);
-                }
-              });
-            }
-          } catch (e) {
-            console.warn("Error merging offline reference song requests.", e);
-          }
-        }
-
-        setRequests(combined);
-        setLoading(false);
-      },
-      (error) => {
-        console.warn("Firestore access restricted, switching directly to local persistent sandbox storage.", error);
-        setConnectionError(true);
-        const saved = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
-        if (saved) {
-          try {
-            setRequests(JSON.parse(saved));
-          } catch {
-            setRequests(INITIAL_OFFLINE_SONGS);
-          }
-        } else {
-          setRequests(INITIAL_OFFLINE_SONGS);
-        }
-        setLoading(false);
-        handleFirestoreError(error, OperationType.LIST, `songRequests?eventId=${effectiveEventId}`);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [effectiveEventId]);
-
-  // Save requests offline safely
-  const persistOfflineDataUpdated = (newList: SongRequest[]) => {
-    setRequests(newList);
-    localStorage.setItem(`rpd_offline_song_requests_${effectiveEventId}`, JSON.stringify(newList));
-  };
-
   // Auth Handlers
   const triggerGoogleSignInFlow = async () => {
     if (isFirebaseConfigured && auth) {
@@ -680,64 +546,7 @@ export default function App() {
       setShowRoleSelector(true);
       return;
     }
-
-    if (votedSongIds.includes(requestId)) {
-      return; // Pre-cache safety lock
-    }
-
-    recordVoteInLocalCache(requestId);
-
-    if (isFirebaseConfigured && db && !connectionError) {
-      try {
-        const batch = writeBatch(db);
-        const songRef = doc(db, 'songRequests', requestId);
-        const voteRef = doc(db, 'songRequests', requestId, 'votes', currentUser.uid);
-
-        batch.set(voteRef, {
-          voterId: currentUser.uid,
-          voterName: currentUser.displayName,
-          createdAt: serverTimestamp()
-        });
-
-        batch.update(songRef, {
-          votesCount: increment(1),
-          updatedAt: serverTimestamp(),
-          voters: arrayUnion({
-            uid: currentUser.uid,
-            displayName: currentUser.displayName,
-            email: currentUser.email || ''
-          })
-        });
-
-        await batch.commit();
-      } catch (err) {
-        console.warn("Firestore upvote failed, applying changes in local frame.", err);
-        const updated = requests.map((r) =>
-          r.id === requestId
-            ? {
-                ...r,
-                votesCount: r.votesCount + 1,
-                updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-                voters: [...(r.voters || []), { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email || undefined }]
-              }
-            : r
-        );
-        persistOfflineDataUpdated(updated);
-        handleFirestoreError(err, OperationType.WRITE, `songRequests/${requestId}`);
-      }
-    } else {
-      const updated = requests.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              votesCount: r.votesCount + 1,
-              updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-              voters: [...(r.voters || []), { uid: currentUser.uid, displayName: currentUser.displayName, email: currentUser.email || undefined }]
-            }
-          : r
-      );
-      persistOfflineDataUpdated(updated);
-    }
+    await upvoteSong(requestId);
   };
 
   // Unvote Action Core
@@ -746,77 +555,7 @@ export default function App() {
       setShowRoleSelector(true);
       return;
     }
-
-    if (!votedSongIds.includes(requestId)) {
-      return; // Not voted, nothing to retract
-    }
-
-    // Retract local cache vote instantly for immediate user feedback
-    const updatedVotes = votedSongIds.filter((id) => id !== requestId);
-    setVotedSongIds(updatedVotes);
-    localStorage.setItem(`rpd_votes_${currentUser.uid}`, JSON.stringify(updatedVotes));
-
-    if (isFirebaseConfigured && db && !connectionError) {
-      try {
-        const batch = writeBatch(db);
-        const songRef = doc(db, 'songRequests', requestId);
-        const voteRef = doc(db, 'songRequests', requestId, 'votes', currentUser.uid);
-
-        batch.delete(voteRef);
-
-        batch.update(songRef, {
-          votesCount: increment(-1),
-          updatedAt: serverTimestamp(),
-          voters: arrayRemove({
-            uid: currentUser.uid,
-            displayName: currentUser.displayName,
-            email: currentUser.email || ''
-          })
-        });
-
-        await batch.commit();
-      } catch (err) {
-        console.warn("Firestore unvote failed, processing changes local frame.", err);
-        const updated = requests.map((r) =>
-          r.id === requestId
-            ? {
-                ...r,
-                votesCount: Math.max(0, r.votesCount - 1),
-                updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-                voters: (r.voters || []).filter((v) => v.uid !== currentUser.uid)
-              }
-            : r
-        );
-        persistOfflineDataUpdated(updated);
-        handleFirestoreError(err, OperationType.WRITE, `songRequests/${requestId}`);
-      }
-    } else {
-      const updated = requests.map((r) =>
-        r.id === requestId
-          ? {
-              ...r,
-              votesCount: Math.max(0, r.votesCount - 1),
-              updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-              voters: (r.voters || []).filter((v) => v.uid !== currentUser.uid)
-            }
-          : r
-      );
-      persistOfflineDataUpdated(updated);
-    }
-  };
-
-  // Case-insensitive duplicate check to convert repeats to votes organically scoped per event
-  const checkDuplicateSong = (title: string, artist: string, targetEventId = effectiveEventId) => {
-    const cleanTitle = title.trim().toLowerCase();
-    const cleanArtist = artist.trim().toLowerCase();
-
-    return requests.find(
-      (r) =>
-        (r.eventId || 'event_1') === targetEventId &&
-        r.title.toLowerCase() === cleanTitle &&
-        r.artist.toLowerCase() === cleanArtist &&
-        r.status !== 'rejected'
-    );
+    await unvoteSong(requestId);
   };
 
   // Submit Song Request Handler
@@ -832,20 +571,16 @@ export default function App() {
 
     const trimmedTitle = newTitle.trim();
     const trimmedArtist = newArtist.trim();
-    const trimmedYoutube = youtubeUrl.trim();
-    const trimmedTimestamp = timestamp.trim();
 
     if (!trimmedTitle || !trimmedArtist) {
       setFormError('Both Song Title and Artist/Group name are required!');
       return;
     }
 
-    // CONVERSION TO VOTE - check if duplicate already exists!
-    const duplicate = checkDuplicateSong(trimmedTitle, trimmedArtist);
-    if (duplicate) {
-      // Automatically triggers upvote on duplicate
-      await handleSongUpvoteAction(duplicate.id);
-
+    setIsSubmitting(true);
+    try {
+      const res = await submitSongRequest(trimmedTitle, trimmedArtist, dancePart, youtubeUrl.trim(), timestamp.trim());
+      
       // Clean inputs
       setNewTitle('');
       setNewArtist('');
@@ -853,102 +588,12 @@ export default function App() {
       setYoutubeUrl('');
       setTimestamp('');
 
-      setSuccessNotification('autovoted');
+      setSuccessNotification(res.status);
       setTimeout(() => setSuccessNotification(null), 5000);
-      return;
-    }
-
-    setIsSubmitting(true);
-
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
-    const freshRequest: SongRequest = {
-      id: requestId,
-      title: trimmedTitle,
-      artist: trimmedArtist,
-      creatorId: currentUser.uid,
-      creatorName: currentUser.displayName,
-      creatorEmail: currentUser.email,
-      createdAt: { seconds: Math.floor(Date.now() / 1000) },
-      updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-      status: 'pending',
-      votesCount: 1,
-      dancePart: dancePart !== 'none' ? dancePart : undefined,
-      youtubeUrl: trimmedYoutube || undefined,
-      timestamp: trimmedTimestamp || undefined,
-      eventId: effectiveEventId,
-      voters: [{
-        uid: currentUser.uid,
-        displayName: currentUser.displayName,
-        email: currentUser.email || ''
-      }]
-    };
-
-    if (isFirebaseConfigured && db && !connectionError) {
-      try {
-        const batch = writeBatch(db);
-        const songRef = doc(db, 'songRequests', requestId);
-        const voteRef = doc(db, 'songRequests', requestId, 'votes', currentUser.uid);
-
-        batch.set(songRef, {
-          ...freshRequest,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp()
-        });
-
-        batch.set(voteRef, {
-          voterId: currentUser.uid,
-          voterName: currentUser.displayName,
-          createdAt: serverTimestamp()
-        });
-
-        await batch.commit();
-        recordVoteInLocalCache(requestId);
-
-        // Reset
-        setNewTitle('');
-        setNewArtist('');
-        setDancePart('none');
-        setYoutubeUrl('');
-        setTimestamp('');
-
-        setSuccessNotification('created');
-        setTimeout(() => setSuccessNotification(null), 5000);
-      } catch (err) {
-        console.warn("Write blocked. Saving request to current offline session.", err);
-        const nextList = [freshRequest, ...requests];
-        persistOfflineDataUpdated(nextList);
-        recordVoteInLocalCache(requestId);
-
-        // Reset
-        setNewTitle('');
-        setNewArtist('');
-        setDancePart('none');
-        setYoutubeUrl('');
-        setTimestamp('');
-
-        setSuccessNotification('created');
-        setTimeout(() => setSuccessNotification(null), 5000);
-        handleFirestoreError(err, OperationType.CREATE, `songRequests/${requestId}`);
-      } finally {
-        setIsSubmitting(false);
-      }
-    } else {
-      setTimeout(() => {
-        const nextList = [freshRequest, ...requests];
-        persistOfflineDataUpdated(nextList);
-        recordVoteInLocalCache(requestId);
-
-        // Reset
-        setNewTitle('');
-        setNewArtist('');
-        setDancePart('none');
-        setYoutubeUrl('');
-        setTimestamp('');
-
-        setSuccessNotification('created');
-        setIsSubmitting(false);
-        setTimeout(() => setSuccessNotification(null), 5000);
-      }, 300);
+    } catch (err: any) {
+      setFormError(err.message || String(err));
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -1126,7 +771,7 @@ export default function App() {
     if (didSucceed) {
       // Overwrite local memory states entirely to support "We no need history and focus on single active event"
       setEvents([freshEvent]);
-      setRequests([]);
+      persistOfflineDataUpdated([]);
       localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
       localStorage.removeItem(`rpd_offline_song_requests_${eventId}`);
       localStorage.setItem('rpd_active_event_id', eventId);
@@ -1234,7 +879,7 @@ export default function App() {
 
     // Clear local requests associated with this event
     const nextRequests = requests.filter((r) => r.eventId !== targetId);
-    setRequests(nextRequests);
+    persistOfflineDataUpdated(nextRequests);
 
     // Synchronize deletion to Firebase if configured
     if (isFirebaseConfigured && db && !connectionError) {

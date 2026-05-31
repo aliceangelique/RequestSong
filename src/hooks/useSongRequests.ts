@@ -23,10 +23,21 @@ interface UseSongRequestsProps {
     isAnonymous?: boolean;
   } | null;
   effectiveEventId: string;
+  initialSongs?: SongRequest[];
 }
 
-export function useSongRequests({ currentUser, effectiveEventId }: UseSongRequestsProps) {
-  const [requests, setRequests] = useState<SongRequest[]>([]);
+export function useSongRequests({ currentUser, effectiveEventId, initialSongs = [] }: UseSongRequestsProps) {
+  const [requests, setRequests] = useState<SongRequest[]>(() => {
+    const saved = localStorage.getItem(`rpd_offline_song_requests_${effectiveEventId}`);
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return initialSongs;
+      }
+    }
+    return initialSongs;
+  });
   const [loading, setLoading] = useState<boolean>(true);
   const [connectionError, setConnectionError] = useState<boolean>(false);
   const [votedSongIds, setVotedSongIds] = useState<string[]>([]);
@@ -96,10 +107,10 @@ export function useSongRequests({ currentUser, effectiveEventId }: UseSongReques
         try {
           setRequests(JSON.parse(saved));
         } catch {
-          setRequests([]);
+          setRequests(initialSongs);
         }
       } else {
-        setRequests([]);
+        setRequests(initialSongs);
       }
       setLoading(false);
       return;
@@ -145,10 +156,10 @@ export function useSongRequests({ currentUser, effectiveEventId }: UseSongReques
           try {
             setRequests(JSON.parse(saved));
           } catch {
-            setRequests([]);
+            setRequests(initialSongs);
           }
         } else {
-          setRequests([]);
+          setRequests(initialSongs);
         }
         setLoading(false);
         handleFirestoreError(error, OperationType.LIST, `songRequests?eventId=${effectiveEventId}`);
@@ -156,7 +167,7 @@ export function useSongRequests({ currentUser, effectiveEventId }: UseSongReques
     );
 
     return () => unsubscribe();
-  }, [effectiveEventId]);
+  }, [effectiveEventId, initialSongs]);
 
   // Case-insensitive duplicate check
   const checkDuplicateSong = useCallback((title: string, artist: string) => {
@@ -390,6 +401,7 @@ export function useSongRequests({ currentUser, effectiveEventId }: UseSongReques
     upvoteSong,
     unvoteSong,
     submitSongRequest,
-    persistOfflineDataUpdated
+    persistOfflineDataUpdated,
+    checkDuplicateSong
   };
 }
