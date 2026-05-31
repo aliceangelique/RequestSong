@@ -38,7 +38,9 @@ import {
   Calendar,
   MapPin,
   Instagram,
-  Lock
+  Lock,
+  WifiOff,
+  Wifi
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -61,13 +63,6 @@ const INITIAL_OFFLINE_EVENTS: DanceEvent[] = [
     time: 'May 30, 2026, 4:00 PM',
     createdAt: { seconds: Math.floor(Date.now() / 1000) - 50000 },
     instagramUrl: 'https://www.instagram.com/p/DYSCCDMChxv/'
-  },
-  {
-    id: 'event_2',
-    name: 'Silom Gay Pride K-Pop Dance Arena',
-    place: 'Silom Road Pedestrian Walkway, Bangkok',
-    time: 'June 15, 2026, 6:00 PM',
-    createdAt: { seconds: Math.floor(Date.now() / 1000) - 40000 }
   }
 ];
 
@@ -1019,10 +1014,24 @@ export default function App() {
       createdAt: { seconds: Math.floor(Date.now() / 1000) }
     };
 
+    // Firebase reset active events and requests first to support "We no need history / Replace with new and delete old one"
     if (isFirebaseConfigured && db && !connectionError && currentUser && !currentUser.isSimulated) {
       try {
+        const batch = writeBatch(db);
+
+        // Delete all old events on reset
+        events.forEach((ev) => {
+          batch.delete(doc(db, 'danceEvents', ev.id));
+        });
+
+        // Delete all old song requests on reset
+        requests.forEach((req) => {
+          batch.delete(doc(db, 'songRequests', req.id));
+        });
+
+        // Set the active focus setting and the new event
         const eventDocRef = doc(db, 'danceEvents', eventId);
-        await setDoc(eventDocRef, {
+        batch.set(eventDocRef, {
           id: eventId,
           name: freshEvent.name,
           place: freshEvent.place,
@@ -1030,23 +1039,28 @@ export default function App() {
           instagramUrl: freshEvent.instagramUrl || '',
           createdAt: serverTimestamp()
         });
-        
-        // Also persist locally in offline list as a safeguard
-        const nextEvents = [freshEvent, ...events];
-        localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
+
+        const activeEventRef = doc(db, 'settings', 'activeEvent');
+        batch.set(activeEventRef, {
+          activeEventId: eventId,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+
+        await batch.commit();
       } catch (err) {
-        console.warn("Failed syncing new event to Firebase, saving offline.", err);
-        const nextEvents = [freshEvent, ...events];
-        setEvents(nextEvents);
-        localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
+        console.warn("Failed database reset/overwrite via Firebase, falling back to clean local database overwrite.", err);
       }
-    } else {
-      const nextEvents = [freshEvent, ...events];
-      setEvents(nextEvents);
-      localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
     }
 
+    // Overwrite local memory states entirely to support "We no need history and focus on single active event"
+    setEvents([freshEvent]);
+    setRequests([]);
+    localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
+    localStorage.removeItem('rpd_offline_song_requests');
+    localStorage.setItem('rpd_active_event_id', eventId);
+    setActiveEventId(eventId);
     setSelectedEventId(eventId);
+
     setNewEventName('');
     setNewEventPlace('');
     setNewEventTime('');
@@ -1056,9 +1070,6 @@ export default function App() {
     setNewEventInstagramUrl('');
     setEventSuccess(true);
     setTimeout(() => setEventSuccess(false), 4500);
-    
-    // Auto-activate newly created event globally
-    handleToggleActiveEvent(eventId);
   };
 
   // Synchronize active event globally (Admins only)
@@ -1078,6 +1089,96 @@ export default function App() {
     } else {
       setActiveEventId(targetId);
       localStorage.setItem('rpd_active_event_id', targetId);
+    }
+  };
+
+  // Helper to determine if an event has already ended (is in the past)
+  const isEventPast = (ev: DanceEvent) => {
+    if (!ev) return false;
+    const timeStr = ev.time;
+    if (!timeStr) return false;
+    try {
+      if (timeStr.includes('|')) {
+        const parts = timeStr.split('|');
+        const datePart = parts[0]; // YYYY-MM-DD
+        const timePart = parts[2] || parts[1]; // End time or Start time
+        if (datePart && timePart) {
+          const dt = new Date(`${datePart}T${timePart}:00`);
+          if (!isNaN(dt.getTime())) {
+            return dt.getTime() < Date.now();
+          }
+        }
+      }
+      const parsed = new Date(timeStr);
+      if (!isNaN(parsed.getTime())) {
+        return parsed.getTime() < Date.now();
+      }
+    } catch (e) {
+      console.error("isEventPast parsing error", e);
+    }
+    return false;
+  };
+
+  // Delete event action (Admins only)
+  const handleDeleteEvent = async (targetId: string) => {
+    if (!isAdmin) return;
+
+    if (targetId === 'event_1') {
+      alert("This is the default seed event and cannot be deleted.");
+      return;
+    }
+
+    const eventToDel = events.find((e) => e.id === targetId);
+    if (!eventToDel) return;
+
+    const isPast = isEventPast(eventToDel);
+    const confirmMessage = isPast
+      ? `Are you sure you want to delete the past event "${eventToDel.name}"? This will permanently delete this event and all associated song requests.`
+      : `Are you sure you want to delete the event "${eventToDel.name}"? This will permanently delete this event and all associated song requests.`;
+
+    const confirmDelete = window.confirm(confirmMessage);
+    if (!confirmDelete) return;
+
+    // Filter out from local state pool
+    const nextEvents = events.filter((e) => e.id !== targetId);
+
+    // Fallback logic for active / selected reference
+    let nextSelected = selectedEventId;
+    let nextActive = activeEventId;
+
+    if (selectedEventId === targetId) {
+      nextSelected = nextEvents.length > 0 ? nextEvents[0].id : 'event_1';
+      setSelectedEventId(nextSelected);
+    }
+    if (activeEventId === targetId) {
+      nextActive = nextEvents.length > 0 ? nextEvents[0].id : 'event_1';
+      handleToggleActiveEvent(nextActive);
+    }
+
+    setEvents(nextEvents);
+    localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
+
+    // Clear local requests associated with this event
+    const nextRequests = requests.filter((r) => r.eventId !== targetId);
+    setRequests(nextRequests);
+
+    // Synchronize deletion to Firebase if configured
+    if (isFirebaseConfigured && db && !connectionError) {
+      try {
+        await deleteDoc(doc(db, 'danceEvents', targetId));
+
+        // Concurrently batch delete Firestore requests scoped to deleted event
+        const requestsToDelete = requests.filter((r) => r.eventId === targetId);
+        if (requestsToDelete.length > 0) {
+          const batch = writeBatch(db);
+          requestsToDelete.forEach((r) => {
+            batch.delete(doc(db, 'songRequests', r.id));
+          });
+          await batch.commit();
+        }
+      } catch (err) {
+        console.warn("Failed syncing deleted event to Firebase, local deletion remains.", err);
+      }
     }
   };
 
@@ -1159,29 +1260,7 @@ export default function App() {
   // Determine if the active event has already ended (is in the past)
   const isActiveEventPast = useMemo(() => {
     const targetEvent = events.find((e) => e.id === activeEventId) || events[0];
-    if (!targetEvent) return false;
-    const timeStr = targetEvent.time;
-    if (!timeStr) return false;
-    try {
-      if (timeStr.includes('|')) {
-        const parts = timeStr.split('|');
-        const datePart = parts[0]; // YYYY-MM-DD
-        const timePart = parts[2] || parts[1]; // End time or Start time
-        if (datePart && timePart) {
-          const dt = new Date(`${datePart}T${timePart}:00`);
-          if (!isNaN(dt.getTime())) {
-            return dt.getTime() < Date.now();
-          }
-        }
-      }
-      const parsed = new Date(timeStr);
-      if (!isNaN(parsed.getTime())) {
-        return parsed.getTime() < Date.now();
-      }
-    } catch (e) {
-      console.error("isEventInPast parsing error", e);
-    }
-    return false;
+    return targetEvent ? isEventPast(targetEvent) : false;
   }, [events, activeEventId]);
 
   // Track sorting algorithm: most popular first
@@ -1345,9 +1424,18 @@ export default function App() {
       <div className="bg-slate-900/90 border-b border-brand-yellow/20 px-4 py-2 text-xs flex flex-wrap items-center justify-between gap-3 sticky top-0 z-30 backdrop-blur">
         <div className="flex items-center gap-2">
           <span className="inline-flex h-3.5 w-5 rounded overflow-hidden flex-shrink-0 bg-gradient-to-r from-[#E40303] via-[#FF8C00] via-[#FFED00] via-[#008026] via-[#004CFF] to-[#732982]" title="LGBTQIA+ Community Support Pride Banner" />
-          <span className="text-slate-350 font-bold flex items-center gap-1">
-            <span className="h-1.5 w-1.5 rounded-full bg-brand-yellow animate-pulse" />
-            Bangkok Random Dance
+          <span className="text-slate-350 font-bold flex flex-wrap items-center gap-2">
+            <span className={`h-1.5 w-1.5 rounded-full ${isFirebaseConfigured ? (connectionError ? 'bg-amber-500' : 'bg-green-500') : 'bg-slate-500'} ${!connectionError && isFirebaseConfigured ? 'animate-pulse' : ''}`} />
+            <span>Bangkok Random Dance</span>
+            {isFirebaseConfigured && (
+              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full tracking-wider select-none ${
+                connectionError 
+                  ? 'bg-amber-950/40 text-amber-400 border border-amber-500/20' 
+                  : 'bg-green-950/20 text-green-400 border border-green-500/10'
+              }`}>
+                {connectionError ? 'Offline Safe-Mode' : 'Cloud Sync Active'}
+              </span>
+            )}
           </span>
         </div>
 
@@ -1499,6 +1587,34 @@ export default function App() {
       {/* CORE PORTAL VIEWPORT */}
       <main className="max-w-5xl w-full mx-auto p-4 flex-1 flex flex-col gap-6">
 
+        {/* CONNECTION FALLBACK WARNING BANNER */}
+        {connectionError && (
+          <motion.div 
+            initial={{ opacity: 0, y: -10 }} 
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-amber-950/30 border border-amber-500/20 text-amber-200 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+          >
+            <div className="flex items-start gap-3">
+              <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 mt-0.5">
+                <WifiOff className="w-5 h-5" />
+              </div>
+              <div className="space-y-0.5">
+                <h3 className="text-xs font-black uppercase tracking-wider text-amber-400">Offline Safe-Mode Active</h3>
+                <p className="text-[11px] text-slate-400 max-w-xl leading-relaxed">
+                  The application is currently unable to connect to the Cloud database (possibly due to network filters, VPNs, or browser adblock). 
+                  <strong> No action is required!</strong> We have automatically activated local persistent sandbox storage so you can request songs, vote, and run simulations seamlessly in your browser.
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => window.location.reload()}
+              className="flex-shrink-0 bg-amber-500 text-slate-950 font-black text-[10px] uppercase tracking-wider px-3.5 py-2 rounded-xl hover:brightness-110 active:scale-97 transition cursor-pointer"
+            >
+              🔄 Retry Connection
+            </button>
+          </motion.div>
+        )}
+
         {/* EVENT SPOTLIGHT INFORMATION & HISTORY SELECTOR */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4" id="event-spotlight-banner">
           <div className="flex items-start gap-3">
@@ -1517,7 +1633,7 @@ export default function App() {
                     </span>
                   </div>
                   <h2 className="text-base font-black text-white mt-1">
-                    No Upcoming Event
+                    No Active Event
                   </h2>
                   <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-[11px] text-slate-400 font-medium">
                     <span className="flex items-center gap-1 text-brand-yellow font-bold">
@@ -1545,7 +1661,7 @@ export default function App() {
                     </span>
                     <span className="text-slate-800">•</span>
                     <span className="flex items-center gap-1">
-                      <Clock className="w-3.5 h-3.5 text-yellow-405 text-yellow-400" />
+                      <Clock className="w-3.5 h-3.5 text-yellow-400" />
                       {formatEventTime(currentEvent.time)}
                     </span>
                   </div>
@@ -1555,41 +1671,13 @@ export default function App() {
           </div>
 
           {userRole === 'organizer' ? (
-            <div className="w-full md:w-auto flex flex-col gap-1.5 min-w-[260px]">
-              <label className="text-[9px] font-black uppercase text-slate-350 tracking-wider">
-                📅 Change Event Scope / Check Prior Activity:
-              </label>
-              <select
-                value={selectedEventId}
-                onChange={(e) => setSelectedEventId(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 outline-none focus:border-brand-yellow transition"
-                id="event-focus-dropdown"
-              >
-                {events.map((ev) => (
-                  <option key={ev.id} value={ev.id}>
-                    {ev.name} ({ev.place})
-                  </option>
-                ))}
-              </select>
-              
-              <div className="mt-1 flex items-center justify-between gap-2 bg-slate-950/80 p-1.5 px-2.5 rounded-xl border border-slate-850">
-                <span className="text-[9px] text-slate-400 font-bold uppercase tracking-wider">
-                  {selectedEventId === activeEventId ? "🎯 LIVE FOCUS" : "💤 BACKLOG VIEW"}
-                </span>
-                {selectedEventId !== activeEventId ? (
-                  <button
-                    onClick={() => handleToggleActiveEvent(selectedEventId)}
-                    className="bg-brand-yellow hover:brightness-110 text-slate-950 text-[9px] font-black uppercase py-1 px-2.5 rounded-lg transition cursor-pointer shadow-sm shadow-brand-yellow/20"
-                    type="button"
-                  >
-                    Set as Active
-                  </button>
-                ) : (
-                  <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded uppercase">
-                    ACTIVE
-                  </span>
-                )}
-              </div>
+            <div className="flex flex-col items-end gap-1 text-right">
+              <span className="text-[10px] font-black uppercase text-brand-yellow tracking-wider">
+                🎯 Single Live Event Mode
+              </span>
+              <span className="text-[11px] text-slate-400">
+                Prior results reset when you create a new event.
+              </span>
             </div>
           ) : (
             userRole === 'user' && isActiveEventPast ? (
@@ -1605,7 +1693,7 @@ export default function App() {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
                 </span>
-                <span>Up coming event</span>
+                <span>Upcoming event</span>
               </div>
             )
           )}
@@ -1614,17 +1702,53 @@ export default function App() {
         {/* REINVERTED TRANSITION WRAPPER */}
         <AnimatePresence mode="wait">
           {userRole === 'user' ? (
-            
-            /* DANCER (USER) INTERACTIVE DECK */
-            <motion.div
-              key="dancer-panel"
-              initial={{ opacity: 0, y: 6 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }}
-              transition={{ duration: 0.15 }}
-              className="space-y-4"
-              id="dancer-dancefloor-view"
-            >
+            isActiveEventPast ? (
+              <motion.div
+                key="dancer-past-closed"
+                initial={{ opacity: 0, scale: 0.98 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0 }}
+                className="bg-slate-900 border border-slate-800 rounded-3xl p-8 text-center max-w-xl mx-auto space-y-6 my-10 relative overflow-hidden"
+              >
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-yellow-500 via-pink-500 to-red-500" />
+                
+                <div className="w-16 h-16 rounded-full bg-slate-950 border border-brand-yellow/30 flex items-center justify-center text-slate-400 mx-auto">
+                  <Lock className="w-6 h-6 text-brand-yellow animate-pulse" />
+                </div>
+
+                <div className="space-y-2">
+                  <span className="text-[10px] font-black tracking-widest uppercase text-brand-yellow bg-brand-yellow/10 border border-brand-yellow/20 px-3.5 py-1.5 rounded-full">
+                    Song Requests Closed
+                  </span>
+                  <h3 className="text-xl font-black text-white mt-4">
+                    The Current Event has Ended
+                  </h3>
+                  <p className="text-xs text-slate-400 leading-relaxed max-w-md mx-auto">
+                    This event is now over. Song request submissions and voting are closed for this session. Please stay tuned for our next exciting event!
+                  </p>
+                  <p className="text-[11px] font-bold text-slate-500 leading-relaxed max-w-md mx-auto">
+                    กรุณาติดตามเพจและข่าวสารงานบ่อยๆ ขอบคุณที่มาร่วมสนุกสุ่มเต้นกันในงานนี้นะครับ!
+                  </p>
+                </div>
+
+                <div className="pt-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs text-slate-400 bg-slate-950 border border-slate-850 px-3.5 py-2.5 rounded-xl">
+                    <span className="h-1.5 w-1.5 bg-brand-yellow rounded-full animate-ping" />
+                    Stay tuned for updates • @Bangkok.RandomDance
+                  </span>
+                </div>
+              </motion.div>
+            ) : (
+              /* DANCER (USER) INTERACTIVE DECK */
+              <motion.div
+                key="dancer-panel"
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.15 }}
+                className="space-y-4"
+                id="dancer-dancefloor-view"
+              >
               {/* MOBILE/TABLET RESPONSIVE TABS Swapper - only visible on small screens (< lg) */}
               <div className="lg:hidden flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 sticky top-0 z-30 backdrop-blur-md gap-1">
                 <button
@@ -2131,6 +2255,7 @@ export default function App() {
               );
             })()}
           </motion.div>
+         )
         ) : (
             
             /* ORGANIZER (ADMIN) VIEW DIRECTIVES */
@@ -2284,6 +2409,92 @@ export default function App() {
                     </motion.div>
                   )}
                 </AnimatePresence>
+              </div>
+
+              {/* EVENT MANAGER SECTION (Admins only) */}
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden" id="admin-event-manager">
+                <div className="absolute top-0 left-0 w-[4px] bg-[#E40303] h-full" />
+                <h3 className="text-xs font-black text-white uppercase tracking-wider flex items-center gap-2 mb-1">
+                  <Calendar className="w-4 h-4 text-brand-yellow" />
+                  <span>Manage Play Spaces & Events</span>
+                </h3>
+                <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
+                  Review active or past events. Organizers can delete any event (and all associated track suggestions) here.
+                </p>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs text-slate-300">
+                    <thead className="bg-slate-950 text-[10px] font-black uppercase text-slate-400 border border-slate-800/50">
+                      <tr>
+                        <th className="p-2.5">Event Name</th>
+                        <th className="p-2.5">Location</th>
+                        <th className="p-2.5">Scheduled Date & Time</th>
+                        <th className="p-2.5">Status</th>
+                        <th className="p-2.5 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-850">
+                      {events.map((ev) => {
+                        const isPast = isEventPast(ev);
+                        const isLiveFocus = ev.id === activeEventId;
+                        return (
+                          <tr key={ev.id} className="hover:bg-slate-950/40 transition">
+                            <td className="p-2.5 font-bold text-slate-200">
+                              {ev.name}
+                            </td>
+                            <td className="p-2.5 text-slate-350">
+                              {ev.place}
+                            </td>
+                            <td className="p-2.5 text-slate-450 font-mono text-[10px]">
+                              {formatEventTime(ev.time)}
+                            </td>
+                            <td className="p-2.5">
+                              {isLiveFocus ? (
+                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
+                                  🎯 Active Live
+                                </span>
+                              ) : isPast ? (
+                                <span className="bg-slate-950/80 text-slate-400 border border-slate-800 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                                  ⏱️ Past Event
+                                </span>
+                              ) : (
+                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                                  📅 Scheduled
+                                </span>
+                              )}
+                            </td>
+                            <td className="p-2.5 text-right flex items-center justify-end gap-2">
+                              {ev.id !== activeEventId && (
+                                <button
+                                  onClick={() => handleToggleActiveEvent(ev.id)}
+                                  className="text-[9px] font-black uppercase bg-slate-950 border border-slate-800 hover:border-brand-yellow hover:text-white px-2.5 py-1.5 rounded-lg transition"
+                                  title="Change live focus to this event"
+                                  type="button"
+                                >
+                                  Activate
+                                </button>
+                              )}
+                              <button
+                                disabled={ev.id === 'event_1'}
+                                onClick={() => handleDeleteEvent(ev.id)}
+                                className={`text-[9px] font-black uppercase px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 ${
+                                  ev.id === 'event_1'
+                                    ? 'bg-slate-900 border border-slate-850 text-slate-600 cursor-not-allowed opacity-40'
+                                    : 'bg-red-950/25 text-red-400 border border-red-500/15 hover:bg-red-900 hover:text-white cursor-pointer'
+                                }`}
+                                title={ev.id === 'event_1' ? "Default Event cannot be removed" : "Delete event and its suggestions"}
+                                type="button"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                                <span>Delete</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               </div>
 
               {/* DJ LIVE METRICS DATABASE BOARD */}

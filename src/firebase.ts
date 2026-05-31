@@ -1,6 +1,6 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, signOut } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
+import { initializeFirestore } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
 // Safe checking if Firebase is fully provisioned
@@ -14,8 +14,12 @@ const app = isFirebaseConfigured
   ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
   : null;
 
-// Initialize exports safely
-export const db = app ? getFirestore(app, firebaseConfig.firestoreDatabaseId || '(default)') : null;
+// Initialize exports safely with experimentalForceLongPolling to handle proxy/iframe/sandbox WS blockers
+export const db = app
+  ? initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, firebaseConfig.firestoreDatabaseId || '(default)')
+  : null;
 export const auth = app ? getAuth(app) : null;
 export const googleProvider = new GoogleAuthProvider();
 

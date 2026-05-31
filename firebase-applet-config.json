@@ -1,9 +1,10 @@
 {
-  "apiKey": "",
-  "authDomain": "",
-  "projectId": "",
-  "storageBucket": "",
-  "messagingSenderId": "",
-  "appId": "",
-  "firestoreDatabaseId": "(default)"
+  "projectId": "grounded-brace-3tn3v",
+  "appId": "1:179943042801:web:98bc10962b0fdda107c350",
+  "apiKey": "AIzaSyCzqUUcXTgeCgG8GdRnF5dDXkmm41-0mmA",
+  "authDomain": "grounded-brace-3tn3v.firebaseapp.com",
+  "firestoreDatabaseId": "ai-studio-260a2747-db9f-45fe-b57a-5f90b977f773",
+  "storageBucket": "grounded-brace-3tn3v.firebasestorage.app",
+  "messagingSenderId": "179943042801",
+  "measurementId": ""
 }
