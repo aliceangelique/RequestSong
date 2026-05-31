@@ -42,7 +42,8 @@ service cloud.firestore {
         && (!('dancePart' in data) || data.dancePart is string)
         && (!('youtubeUrl' in data) || data.youtubeUrl is string)
         && (!('timestamp' in data) || data.timestamp is string)
-        && (!('eventId' in data) || data.eventId is string);
+        && (!('eventId' in data) || data.eventId is string)
+        && (!('voters' in data) || (data.voters is list && data.voters.size() <= 1000));
     }
 
     // Helper to check for a valid vote shape
@@ -108,7 +109,7 @@ service cloud.firestore {
             (incoming().votesCount == resource.data.votesCount + 1 && existsAfter(/databases/$(database)/documents/songRequests/$(requestId)/votes/$(request.auth.uid)))
             || (incoming().votesCount == resource.data.votesCount - 1 && !existsAfter(/databases/$(database)/documents/songRequests/$(requestId)/votes/$(request.auth.uid)))
            )
-           && incoming().diff(resource.data).affectedKeys().hasOnly(['votesCount', 'updatedAt'])
+           && incoming().diff(resource.data).affectedKeys().hasOnly(['votesCount', 'updatedAt', 'voters'])
            && incoming().updatedAt == request.time)
            
           ||

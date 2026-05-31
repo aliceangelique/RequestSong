@@ -50,7 +50,9 @@ import {
   signInWithGoogle,
   signInWithGoogleRedirect,
   getGoogleRedirectResult,
-  handleSignOut
+  handleSignOut,
+  handleFirestoreError,
+  OperationType
 } from './firebase';
 import { SongRequest, DanceEvent } from './types';
 
@@ -377,6 +379,7 @@ export default function App() {
         } else {
           setActiveEventId('event_1');
         }
+        handleFirestoreError(error, OperationType.GET, 'settings/activeEvent');
       }
     );
 
@@ -475,6 +478,7 @@ export default function App() {
           setEvents(INITIAL_OFFLINE_EVENTS);
           setSelectedEventId('event_1');
         }
+        handleFirestoreError(error, OperationType.LIST, 'danceEvents');
       }
     );
 
@@ -523,7 +527,8 @@ export default function App() {
             dancePart: data.dancePart || 'none',
             youtubeUrl: data.youtubeUrl || '',
             timestamp: data.timestamp || '',
-            eventId: data.eventId || 'event_1'
+            eventId: data.eventId || 'event_1',
+            voters: data.voters || []
           });
         });
 
@@ -558,6 +563,7 @@ export default function App() {
           setRequests(INITIAL_OFFLINE_SONGS);
         }
         setLoading(false);
+        handleFirestoreError(error, OperationType.LIST, 'songRequests');
       }
     );
 
@@ -667,6 +673,7 @@ export default function App() {
             : r
         );
         persistOfflineDataUpdated(updated);
+        handleFirestoreError(err, OperationType.WRITE, `songRequests/${requestId}`);
       }
     } else {
       const updated = requests.map((r) =>
@@ -731,6 +738,7 @@ export default function App() {
             : r
         );
         persistOfflineDataUpdated(updated);
+        handleFirestoreError(err, OperationType.WRITE, `songRequests/${requestId}`);
       }
     } else {
       const updated = requests.map((r) =>
@@ -870,6 +878,7 @@ export default function App() {
 
         setSuccessNotification('created');
         setTimeout(() => setSuccessNotification(null), 5000);
+        handleFirestoreError(err, OperationType.CREATE, `songRequests/${requestId}`);
       } finally {
         setIsSubmitting(false);
       }
@@ -910,6 +919,7 @@ export default function App() {
         });
       } catch (err) {
         console.warn("Failed syncing online moderator state. Already updated locally.", err);
+        handleFirestoreError(err, OperationType.UPDATE, `songRequests/${requestId}`);
       }
     }
   };
@@ -929,6 +939,7 @@ export default function App() {
         await deleteDoc(songRef);
       } catch (err) {
         console.warn("Online delete failed. Already applied locally.", err);
+        handleFirestoreError(err, OperationType.DELETE, `songRequests/${requestId}`);
       }
     }
   };
@@ -954,6 +965,7 @@ export default function App() {
         );
       } catch (err) {
         console.warn("Online wipe failed.", err);
+        handleFirestoreError(err, OperationType.DELETE, `songRequests/all`);
       }
     }
   };
@@ -991,6 +1003,7 @@ export default function App() {
         );
       } catch (err) {
         console.warn("Online seed restore failed.", err);
+        handleFirestoreError(err, OperationType.WRITE, `songRequests/all`);
       }
     }
   };
@@ -1049,6 +1062,7 @@ export default function App() {
         await batch.commit();
       } catch (err) {
         console.warn("Failed database reset/overwrite via Firebase, falling back to clean local database overwrite.", err);
+        handleFirestoreError(err, OperationType.WRITE, `danceEvents/${eventId}`);
       }
     }
 
@@ -1085,6 +1099,7 @@ export default function App() {
         console.warn("Failed updating active event state in Firebase, defaulting local.", err);
         setActiveEventId(targetId);
         localStorage.setItem('rpd_active_event_id', targetId);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/activeEvent');
       }
     } else {
       setActiveEventId(targetId);
@@ -1178,6 +1193,7 @@ export default function App() {
         }
       } catch (err) {
         console.warn("Failed syncing deleted event to Firebase, local deletion remains.", err);
+        handleFirestoreError(err, OperationType.DELETE, `danceEvents/${targetId}`);
       }
     }
   };

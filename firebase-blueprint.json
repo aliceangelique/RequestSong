@@ -22,7 +22,11 @@
         "dancePart": { "type": "string", "enum": ["Hook 1", "Hook 2", "Breakdance", "none"], "description": "The requested choreo or dance section" },
         "youtubeUrl": { "type": "string", "description": "An optional Youtube reference video URL" },
         "timestamp": { "type": "string", "description": "Requested section timestamp bounds" },
-        "eventId": { "type": "string", "description": "The event ID this request belongs to" }
+        "eventId": { "type": "string", "description": "The event ID this request belongs to" },
+        "voters": {
+          "type": "array",
+          "description": "An array of maps representing details of users who upvoted"
+        }
       },
       "required": ["id", "title", "artist", "creatorId", "creatorName", "creatorEmail", "createdAt", "updatedAt", "status", "votesCount"]
     },
