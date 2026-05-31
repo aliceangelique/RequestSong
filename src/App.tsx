@@ -217,6 +217,8 @@ export default function App() {
   } | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [showRoleSelector, setShowRoleSelector] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [isLoginAttempting, setIsLoginAttempting] = useState(false);
   const [viewingVotersSong, setViewingVotersSong] = useState<SongRequest | null>(null);
 
   // Firestore connection status checker
@@ -335,8 +337,9 @@ export default function App() {
           setFirebaseUser(usr);
         }
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.error("Error retrieving redirect result:", err);
+        setLoginError(err?.message || String(err));
       });
 
     const unsubscribe = onAuthStateChanged(auth, (usr) => {
@@ -575,6 +578,8 @@ export default function App() {
   // Auth Handlers
   const triggerGoogleSignInFlow = async () => {
     if (isFirebaseConfigured && auth) {
+      setLoginError(null);
+      setIsLoginAttempting(true);
       // Detect in-app webviews like Instagram, LINE, Facebook, WeChat
       const ua = navigator.userAgent || navigator.vendor || '';
       const isInAppBrowser = /FBAN|FBAV|Instagram|Line|MicroMessenger|WhatsApp|wv/i.test(ua);
@@ -582,8 +587,10 @@ export default function App() {
       if (isInAppBrowser) {
         try {
           await signInWithGoogleRedirect();
-        } catch (err) {
+        } catch (err: any) {
           console.error("Direct redirect flow failed:", err);
+          setLoginError(err?.message || String(err));
+          setIsLoginAttempting(false);
           alert("Failed to open login redirect. If you are inside an in-app browser, please click the triple dot menu (...) in the corner and select 'Open in Chrome/Safari'.");
         }
         return;
@@ -591,13 +598,16 @@ export default function App() {
 
       try {
         await signInWithGoogle();
-      } catch (err) {
+        setIsLoginAttempting(false);
+      } catch (err: any) {
         console.warn("Popup login blocked or failed. Falling back to Redirect Sign-In...", err);
         try {
           await signInWithGoogleRedirect();
-        } catch (redirErr) {
+        } catch (redirErr: any) {
           console.error("Redirect fallback failed:", redirErr);
-          alert("Could not initialize authentication. Please allow popups/redirects and check your internet connection.");
+          const errMsg = redirErr?.message || String(redirErr);
+          setLoginError(errMsg);
+          setIsLoginAttempting(false);
         }
       }
     }
@@ -1291,12 +1301,59 @@ export default function App() {
             <div className="pt-2">
               <button
                 onClick={triggerGoogleSignInFlow}
-                className="w-full py-3.5 px-4 rounded-2xl bg-brand-yellow text-slate-950 hover:brightness-110 active:scale-98 transition font-black text-xs uppercase flex items-center justify-center gap-2.5 shadow-lg shadow-brand-yellow/20 cursor-pointer"
+                disabled={isLoginAttempting}
+                className="w-full py-3.5 px-4 rounded-2xl bg-brand-yellow text-slate-950 hover:brightness-110 active:scale-98 transition font-black text-xs uppercase flex items-center justify-center gap-2.5 shadow-lg shadow-brand-yellow/20 cursor-pointer disabled:opacity-50"
               >
-                <LogIn className="w-4 h-4" />
-                <span>Sign In with Google</span>
+                {isLoginAttempting ? (
+                  <div className="w-4 h-4 rounded-full border-2 border-slate-950 border-t-transparent animate-spin" />
+                ) : (
+                  <LogIn className="w-4 h-4" />
+                )}
+                <span>{isLoginAttempting ? "Connecting..." : "Sign In with Google"}</span>
               </button>
             </div>
+
+            {/* Error & Diagnostic Guidelines if login fails or for custom domains (e.g. GitHub Pages) */}
+            {(loginError || window.location.hostname.includes('github.io') || window.location.hostname !== 'localhost') && (
+              <div className="text-left bg-slate-950/60 rounded-2xl p-4 border border-brand-yellow/20 space-y-3.5">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-4 h-4 text-brand-yellow mt-0.5 flex-shrink-0" />
+                  <div className="space-y-1">
+                    <h3 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                      GitHub Pages / Custom Domain Setup
+                    </h3>
+                    <p className="text-[10px] text-slate-400 leading-relaxed">
+                      Google OAuth requires you to whitelist your hosted link in the Firebase management panel, otherwise the sign-in pop-up or redirect won't authenticate.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="text-[10px] text-slate-350 space-y-2 border-t border-slate-800/60 pt-2.5">
+                  <p className="font-bold text-brand-yellow">🛠️ How to Authorize This Domain:</p>
+                  <ol className="list-decimal list-inside space-y-1.5 text-slate-400 pl-1 font-mono text-[9px]">
+                    <li>
+                      Go to <a href="https://console.firebase.google.com" target="_blank" rel="noopener noreferrer" className="text-brand-yellow hover:underline inline-flex items-center gap-0.5">Firebase Console <ExternalLink className="w-2.5 h-2.5" /></a>
+                    </li>
+                    <li>
+                      Navigate to <span className="text-white">Build &gt; Authentication &gt; Settings &gt; Authorized Domains</span>
+                    </li>
+                    <li>
+                      Click <span className="text-white">"Add domain"</span> and type <span className="bg-slate-900 border border-slate-800 text-yellow-300 px-1 rounded">{window.location.hostname}</span>
+                    </li>
+                    <li>
+                      Refresh this page and click login again!
+                    </li>
+                  </ol>
+                </div>
+
+                {loginError && (
+                  <div className="bg-red-950/30 border border-red-950/50 text-red-300 rounded-lg p-2.5 font-mono text-[9px] break-all leading-normal max-h-24 overflow-y-auto">
+                    <span className="font-bold block uppercase text-[8px] text-red-400 mb-0.5">Error details:</span>
+                    {loginError}
+                  </div>
+                )}
+              </div>
+            )}
 
             <div className="text-[9px] text-slate-500 font-medium">
               Secured with Google Cloud Identity • SafeSpace Community
