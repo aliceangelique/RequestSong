@@ -28,12 +28,14 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Derived state to quickly check which songs current user has voted on, directly from Firestore data
   const votedSongIds = currentUser
     ? requests
         .filter((r) => r.voters && r.voters.some((v) => v.uid === currentUser.uid))
         .map((r) => r.id)
     : [];
 
+  // 1. Realtime Online Streaming (0% local sandboxing / no localStorage fallbacks)
   useEffect(() => {
     if (!isFirebaseConfigured || !db) {
       setError('Firebase is not configured or initialized.');
@@ -85,6 +87,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
     return () => unsubscribe();
   }, [effectiveEventId]);
 
+  // Duplicate check based entirely on real-time loaded requests
   const checkDuplicateSong = useCallback((title: string, artist: string) => {
     const cleanTitle = title.trim().toLowerCase();
     const cleanArtist = artist.trim().toLowerCase();
@@ -98,6 +101,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
     );
   }, [requests, effectiveEventId]);
 
+  // 2. 100% Online Voting (Direct batch operations to Firestore / 0% local manual state manipulation)
   const upvoteSong = useCallback(async (requestId: string) => {
     if (!currentUser) throw new Error('Please login to vote.');
     if (!db) throw new Error('Database connection is not available.');
@@ -129,6 +133,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
     }
   }, [currentUser]);
 
+  // Retract voting
   const unvoteSong = useCallback(async (requestId: string) => {
     if (!currentUser) throw new Error('Please login to retract your vote.');
     if (!db) throw new Error('Database connection is not available.');
@@ -156,6 +161,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
     }
   }, [currentUser]);
 
+  // 3. 100% Online Request Submission (Saves immediately to Firebase with eventId / 0% offline queue)
   const submitSongRequest = useCallback(async (
     title: string,
     artist: string,
@@ -179,6 +185,7 @@ export function useFirebaseSongs({ currentUser, effectiveEventId }: UseFirebaseS
       throw new Error('Both Song Title and Artist name are required!');
     }
 
+    // Auto-upvote if it exists as duplicate
     const duplicate = checkDuplicateSong(trimmedTitle, trimmedArtist);
     if (duplicate) {
       await upvoteSong(duplicate.id);

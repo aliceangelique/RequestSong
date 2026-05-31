@@ -58,7 +58,7 @@ import {
   OperationType
 } from './firebase';
 import { SongRequest, DanceEvent } from './types';
-import { useSongRequests } from './hooks/useSongRequests';
+import { useFirebaseSongs } from './hooks/useFirebaseSongs';
 
 // Pre-seeded starter events to support historical and new play spaces
 const INITIAL_OFFLINE_EVENTS: DanceEvent[] = [
@@ -289,18 +289,18 @@ export default function App() {
   const {
     requests,
     loading,
-    connectionError,
+    error,
     votedSongIds,
     upvoteSong,
     unvoteSong,
     submitSongRequest,
-    persistOfflineDataUpdated,
     checkDuplicateSong
-  } = useSongRequests({
+  } = useFirebaseSongs({
     currentUser,
-    effectiveEventId,
-    initialSongs: INITIAL_OFFLINE_SONGS
+    effectiveEventId
   });
+
+  const connectionError = !!error;
 
   // Admin identity check (specifically Digimon.Angelique@gmail.com specified by user context)
   const isAdmin = useMemo(() => {
@@ -599,13 +599,7 @@ export default function App() {
 
   // Moderator Control Handlers
   const handleAdminStatusUpdate = async (requestId: string, newStatus: 'pending' | 'approved' | 'rejected' | 'played') => {
-    // Immediate optimistic local update so the UI updates instantly across all views
-    const updated = requests.map((r) =>
-      r.id === requestId ? { ...r, status: newStatus, updatedAt: { seconds: Math.floor(Date.now() / 1000) } } : r
-    );
-    persistOfflineDataUpdated(updated);
-
-    if (isFirebaseConfigured && db && !connectionError) {
+    if (isFirebaseConfigured && db) {
       try {
         const songRef = doc(db, 'songRequests', requestId);
         await updateDoc(songRef, {
@@ -613,7 +607,7 @@ export default function App() {
           updatedAt: serverTimestamp()
         });
       } catch (err) {
-        console.warn("Failed syncing online moderator state. Already updated locally.", err);
+        console.error("Failed syncing online moderator state.", err);
         handleFirestoreError(err, OperationType.UPDATE, `songRequests/${requestId}`);
       }
     }
@@ -624,16 +618,12 @@ export default function App() {
       return;
     }
 
-    // Immediate optimistic local delete so the UI updates instantly online/offline for both views
-    const filtered = requests.filter((r) => r.id !== requestId);
-    persistOfflineDataUpdated(filtered);
-
-    if (isFirebaseConfigured && db && !connectionError) {
+    if (isFirebaseConfigured && db) {
       try {
         const songRef = doc(db, 'songRequests', requestId);
         await deleteDoc(songRef);
       } catch (err) {
-        console.warn("Online delete failed. Already applied locally.", err);
+        console.error("Online delete failed.", err);
         handleFirestoreError(err, OperationType.DELETE, `songRequests/${requestId}`);
       }
     }
@@ -647,11 +637,8 @@ export default function App() {
 
     const idsToDelete = requests.map((r) => r.id);
 
-    // 1. Instantly write empty state locally
-    persistOfflineDataUpdated([]);
-
-    // 2. Erase from Firestore concurrently if connected
-    if (isFirebaseConfigured && db && !connectionError) {
+    // Erase from Firestore concurrently if connected
+    if (isFirebaseConfigured && db) {
       try {
         await Promise.all(
           idsToDelete.map(async (id) => {
@@ -659,7 +646,7 @@ export default function App() {
           })
         );
       } catch (err) {
-        console.warn("Online wipe failed.", err);
+        console.error("Online wipe failed.", err);
         handleFirestoreError(err, OperationType.DELETE, `songRequests/all`);
       }
     }
@@ -673,11 +660,8 @@ export default function App() {
 
     const idsToDelete = requests.map((r) => r.id);
 
-    // 1. Instantly write seed state locally
-    persistOfflineDataUpdated(INITIAL_OFFLINE_SONGS);
-
-    // 2. Clean and set online to Firestore if connected
-    if (isFirebaseConfigured && db && !connectionError) {
+    // Clean and set online to Firestore if connected
+    if (isFirebaseConfigured && db) {
       try {
         // Clear all old requests online first
         await Promise.all(
@@ -697,7 +681,7 @@ export default function App() {
           })
         );
       } catch (err) {
-        console.warn("Online seed restore failed.", err);
+        console.error("Online seed restore failed.", err);
         handleFirestoreError(err, OperationType.WRITE, `songRequests/all`);
       }
     }
@@ -771,7 +755,6 @@ export default function App() {
     if (didSucceed) {
       // Overwrite local memory states entirely to support "We no need history and focus on single active event"
       setEvents([freshEvent]);
-      persistOfflineDataUpdated([]);
       localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
       localStorage.removeItem(`rpd_offline_song_requests_${eventId}`);
       localStorage.setItem('rpd_active_event_id', eventId);
@@ -792,7 +775,7 @@ export default function App() {
 
   // Synchronize active event globally (Admins only)
   const handleToggleActiveEvent = async (targetId: string) => {
-    if (isFirebaseConfigured && db && !connectionError) {
+    if (isFirebaseConfigured && db) {
       try {
         const docRef = doc(db, 'settings', 'activeEvent');
         await setDoc(docRef, {
@@ -877,12 +860,8 @@ export default function App() {
     setEvents(nextEvents);
     localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
 
-    // Clear local requests associated with this event
-    const nextRequests = requests.filter((r) => r.eventId !== targetId);
-    persistOfflineDataUpdated(nextRequests);
-
     // Synchronize deletion to Firebase if configured
-    if (isFirebaseConfigured && db && !connectionError) {
+    if (isFirebaseConfigured && db) {
       try {
         await deleteDoc(doc(db, 'danceEvents', targetId));
 
@@ -896,59 +875,10 @@ export default function App() {
           await batch.commit();
         }
       } catch (err) {
-        console.warn("Failed syncing deleted event to Firebase, local deletion remains.", err);
+        console.error("Failed syncing deleted event to Firebase.", err);
         handleFirestoreError(err, OperationType.DELETE, `danceEvents/${targetId}`);
       }
     }
-  };
-
-  // Generate interactive random track stimulation helper
-  const triggerRandomSimulatedRequest = () => {
-    const SONGS = [
-      { title: 'Supernova', artist: 'aespa', part: 'Hook 1' as const },
-      { title: 'How Sweet', artist: 'NewJeans', part: 'Breakdance' as const },
-      { title: 'Armageddon', artist: 'aespa', part: 'Hook 2' as const },
-      { title: 'EASY', artist: 'LE SSERAFIM', part: 'Hook 1' as const },
-      { title: 'OMG', artist: 'NewJeans', part: 'Hook 2' as const },
-      { title: 'Savage', artist: 'aespa', part: 'Breakdance' as const },
-      { title: 'Baddie', artist: 'IVE', part: 'Hook 1' as const },
-      { title: 'Smart', artist: 'LE SSERAFIM', part: 'Hook 1' as const }
-    ];
-
-    const DANCERS = [
-      { name: 'Kai Tanaka', email: 'kai@kpopdev.com' },
-      { name: 'Sora Park', email: 'sora@high-energy.ko' },
-      { name: 'Yuna Kim', email: 'yuna@prideflow.org' },
-      { name: 'Leo Martinez', email: 'leo@martinez.org' }
-    ];
-
-    const pickSong = SONGS[Math.floor(Math.random() * SONGS.length)];
-    const pickDancer = DANCERS[Math.floor(Math.random() * DANCERS.length)];
-
-    const duplicate = checkDuplicateSong(pickSong.title, pickSong.artist, effectiveEventId);
-    if (duplicate) {
-      handleSongUpvoteAction(duplicate.id);
-      return;
-    }
-
-    const simId = `sim_${Date.now()}`;
-    const simRequest: SongRequest = {
-      id: simId,
-      title: pickSong.title,
-      artist: pickSong.artist,
-      creatorId: `user_sim_${Math.floor(Math.random() * 90000)}`,
-      creatorName: pickDancer.name,
-      creatorEmail: pickDancer.email,
-      createdAt: { seconds: Math.floor(Date.now() / 1000) },
-      updatedAt: { seconds: Math.floor(Date.now() / 1000) },
-      status: 'pending',
-      votesCount: Math.floor(Math.random() * 6) + 1,
-      dancePart: pickSong.part,
-      eventId: effectiveEventId
-    };
-
-    const nextList = [simRequest, ...requests];
-    persistOfflineDataUpdated(nextList);
   };
 
   // Filter requests by current effective event before calculating rankings
