@@ -60,7 +60,8 @@
       "description": "System config settings that define the active event.",
       "type": "object",
       "properties": {
-        "activeEventId": { "type": "string", "description": "The globally highlighted event ID" }
+        "activeEventId": { "type": "string", "description": "The globally highlighted event ID" },
+        "isRequestPhaseLocked": { "type": "boolean", "description": "Whether the song requests / voting is locked" }
       },
       "required": ["activeEventId"]
     }

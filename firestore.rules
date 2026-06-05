@@ -67,6 +67,7 @@ service cloud.firestore {
     // Helper to check for a valid active event setting shape
     function isValidActiveEventSetting(data) {
       return data.activeEventId is string && data.activeEventId.size() >= 1 && data.activeEventId.size() <= 128
+        && (!('isRequestPhaseLocked' in data) || data.isRequestPhaseLocked is bool)
         && (!('updatedAt' in data) || data.updatedAt == request.time);
     }
 

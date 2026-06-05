@@ -41,6 +41,7 @@ import {
   MapPin,
   Instagram,
   Lock,
+  Unlock,
   WifiOff,
   Wifi
 } from 'lucide-react';
@@ -226,6 +227,7 @@ export default function App() {
   const [events, setEvents] = useState<DanceEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('event_1');
   const [activeEventId, setActiveEventId] = useState<string>('event_1');
+  const [isRequestPhaseLocked, setIsRequestPhaseLocked] = useState<boolean>(false);
   
   // Event inputs
   const [newEventName, setNewEventName] = useState('');
@@ -269,17 +271,16 @@ export default function App() {
   // Organizer view mode: 'ranked' (default) or 'grouped' (grouped by requester)
   const [organizerViewMode, setOrganizerViewMode] = useState<'ranked' | 'grouped'>('ranked');
 
-  // Computed current user derived from live Firebase context
+  // Computed current user derived from live Firebase context, strictly requiring Google Authentication
   const currentUser = useMemo(() => {
-    if (isFirebaseConfigured && firebaseUser) {
-      const isAnon = firebaseUser.isAnonymous || !firebaseUser.email;
+    if (isFirebaseConfigured && firebaseUser && !firebaseUser.isAnonymous) {
       return {
         uid: firebaseUser.uid,
-        displayName: firebaseUser.displayName || 'Anonymous Dancer',
-        email: isAnon ? 'anonymous@randomdance.net' : firebaseUser.email,
+        displayName: firebaseUser.displayName || 'Authorized Dancer',
+        email: firebaseUser.email || '',
         photoURL: firebaseUser.photoURL || undefined,
         isSimulated: false,
-        isAnonymous: isAnon
+        isAnonymous: false
       };
     }
     return null;
@@ -314,6 +315,23 @@ export default function App() {
       setUserRole('user');
     }
   }, [isAdmin, userRole]);
+
+  // LINE browser auto-redirection to native browser (Chrome/Safari) for seamless experience
+  useEffect(() => {
+    try {
+      const ua = navigator.userAgent || navigator.vendor || '';
+      const isLine = /Line/i.test(ua);
+      if (isLine) {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('openExternalBrowser') !== '1') {
+          url.searchParams.set('openExternalBrowser', '1');
+          window.location.replace(url.toString());
+        }
+      }
+    } catch (e) {
+      console.warn('Browser auto-redirection failed:', e);
+    }
+  }, []);
 
   // Listen to authenticating Firebase session state updates on startup
   useEffect(() => {
@@ -362,6 +380,8 @@ export default function App() {
       } else {
         setActiveEventId('event_1');
       }
+      const savedLock = localStorage.getItem('rpd_request_phase_locked');
+      setIsRequestPhaseLocked(savedLock === 'true');
       return;
     }
 
@@ -371,11 +391,15 @@ export default function App() {
       (docSnap) => {
         if (docSnap.exists()) {
           const data = docSnap.data();
-          if (data && data.activeEventId) {
-            setActiveEventId(data.activeEventId);
+          if (data) {
+            if (data.activeEventId) {
+              setActiveEventId(data.activeEventId);
+            }
+            setIsRequestPhaseLocked(!!data.isRequestPhaseLocked);
           }
         } else {
           setActiveEventId('event_1');
+          setIsRequestPhaseLocked(false);
         }
       },
       (error) => {
@@ -386,6 +410,8 @@ export default function App() {
         } else {
           setActiveEventId('event_1');
         }
+        const savedLock = localStorage.getItem('rpd_request_phase_locked');
+        setIsRequestPhaseLocked(savedLock === 'true');
         handleFirestoreError(error, OperationType.GET, 'settings/activeEvent');
       }
     );
@@ -542,6 +568,10 @@ export default function App() {
 
   // Upvote Action Core
   const handleSongUpvoteAction = async (requestId: string) => {
+    if (isRequestPhaseLocked && userRole !== 'organizer') {
+      alert("🔒 Voting phase has ended for this event.");
+      return;
+    }
     if (!currentUser) {
       setShowRoleSelector(true);
       return;
@@ -551,6 +581,10 @@ export default function App() {
 
   // Unvote Action Core
   const handleSongUnvoteAction = async (requestId: string) => {
+    if (isRequestPhaseLocked && userRole !== 'organizer') {
+      alert("🔒 Voting phase has ended for this event.");
+      return;
+    }
     if (!currentUser) {
       setShowRoleSelector(true);
       return;
@@ -558,11 +592,36 @@ export default function App() {
     await unvoteSong(requestId);
   };
 
+  // Toggle Request Phase (Admins only)
+  const handleToggleRequestPhase = async () => {
+    const nextState = !isRequestPhaseLocked;
+    setIsRequestPhaseLocked(nextState);
+    localStorage.setItem('rpd_request_phase_locked', String(nextState));
+
+    if (isFirebaseConfigured && db) {
+      try {
+        const docRef = doc(db, 'settings', 'activeEvent');
+        await setDoc(docRef, {
+          isRequestPhaseLocked: nextState,
+          updatedAt: serverTimestamp()
+        }, { merge: true });
+      } catch (err) {
+        console.warn("Failed updating request phase in Firebase.", err);
+        handleFirestoreError(err, OperationType.WRITE, 'settings/activeEvent');
+      }
+    }
+  };
+
   // Submit Song Request Handler
   const handleRequestSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError(null);
     setSuccessNotification(null);
+
+    if (isRequestPhaseLocked && userRole !== 'organizer') {
+      setFormError('🔒 Song requests are currently closed.');
+      return;
+    }
 
     if (!currentUser) {
       setFormError('Please authenticate first to request tracks!');
@@ -1425,9 +1484,36 @@ export default function App() {
                 <div className={`space-y-6 lg:col-span-5 ${mobileDancerTab === 'request' ? 'block' : 'hidden lg:block'}`}>
                   {/* STANDARD SUBMISSION FORM */}
                   <div className={`bg-slate-900 border border-slate-800 rounded-2xl p-5 relative overflow-hidden ${mobileDancerTab === 'request' ? 'block' : 'hidden lg:block'}`} id="dancer-request-panel">
-                  <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
+                    {/* Glassmorphic Lock Overlay for Request Phase Locked */}
+                    {userRole === 'user' && isRequestPhaseLocked && (
+                      <div className="absolute inset-0 z-30 backdrop-blur-md bg-slate-950/75 flex flex-col items-center justify-center text-center p-6 border border-slate-800/85">
+                        <motion.div
+                          initial={{ scale: 0.95, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          className="space-y-4 max-w-xs flex flex-col items-center"
+                        >
+                          <div className="w-12 h-12 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.15)] animate-pulse">
+                            <Lock className="w-5 h-5 text-brand-yellow" />
+                          </div>
+                          <div className="space-y-2">
+                            <h4 className="text-xs font-black text-amber-400 uppercase tracking-widest flex items-center gap-1.5 justify-center">
+                              <Lock className="w-3.5 h-3.5" />
+                              <span>PREPARING PLAYLIST</span>
+                            </h4>
+                            <p className="text-[11px] text-slate-300 leading-relaxed font-semibold">
+                              ปิดระบบรีบรีเควสเพลงแล้ว ขณะนี้ทีมงานบางกอกฯ กำลังจัดเตรียมความสนุกให้กับทุกท่านอยู่
+                            </p>
+                            <p className="text-[9px] text-slate-500 uppercase tracking-wider font-mono">
+                              ทีมงาน Bangkok Random Dance  : บางกอกระบำสุ่ม
+                            </p>
+                          </div>
+                        </motion.div>
+                      </div>
+                    )}
+
+                    <div className="absolute top-0 left-0 w-[4px] bg-gradient-to-b from-red-500 via-yellow-400 to-blue-500 h-full" />
                   
-                  <h3 className="text-sm font-black text-white flex items-center gap-2 mb-1">
+                    <h3 className="text-sm font-black text-white flex items-center gap-2 mb-1">
                     <span className="px-1 py-0.2 rounded bg-brand-yellow text-slate-950 text-[9px] font-black uppercase">REQUEST</span>
                     Song Request
                   </h3>
@@ -1459,7 +1545,7 @@ export default function App() {
                           Sign In Required
                         </h4>
                         <p className="text-[11px] text-slate-400 max-w-xs leading-relaxed mx-auto">
-                          Please sign in or identify yourself first to send song requests! This keeps the queue organized and allows tracking who requests each track.
+                          Please sign in with Google to send song requests or vote!
                         </p>
                       </div>
                       <button
@@ -1470,6 +1556,17 @@ export default function App() {
                         <LogIn className="w-3.5 h-3.5" />
                         <span>Sign In with Google</span>
                       </button>
+
+                      {/* In-app browser helpful hint */}
+                      <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1">
+                        <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                          <Instagram className="w-3 h-3 shrink-0" />
+                          <span>เปิดทาง LINE / IG หรือเปล่า?</span>
+                        </p>
+                        <p className="text-[9px] text-slate-350 leading-relaxed">
+                          หากล็อกอิน Google ไม่ผ่าน ให้กดปุ่มจุดสามจุด <span className="font-extrabold">(...)</span> หรือแชร์ แล้วเลือกปุ่ม <span className="underline">"เปิดใน Safari / Open in Chrome"</span> เพื่อล็อกอินได้อย่างราบรื่นครับ!
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <form onSubmit={handleRequestSubmit} className="space-y-4">
@@ -1800,9 +1897,21 @@ export default function App() {
                           </div>
                         );
 
+                        const isVotingLocked = isRequestPhaseLocked && userRole === 'user';
                         const voteButton = (
                           <div className="flex-shrink-0 min-w-[70px] text-right z-10">
-                            {hasVoted ? (
+                            {isVotingLocked ? (
+                              <div
+                                className="px-3 py-1.5 rounded-lg bg-slate-950/40 border border-slate-900/60 text-slate-500 text-xs transition flex flex-col items-center justify-center min-w-[75px] w-full select-none"
+                                title="Voting is currently closed for this phase of the event."
+                              >
+                                <span className="flex items-center gap-1 font-mono text-[11px] font-black">
+                                  <Lock className="w-3 h-3 text-slate-500" />
+                                  <span>{req.votesCount}</span>
+                                </span>
+                                <span className="text-[8px] font-black uppercase mt-0.5 text-slate-650 tracking-wider">Locked</span>
+                              </div>
+                            ) : hasVoted ? (
                               <button
                                 onClick={() => handleSongUnvoteAction(req.id)}
                                 className="group/voted px-3 py-1.5 rounded-lg bg-slate-950 border border-brand-yellow/30 text-brand-yellow text-xs transition duration-200 cursor-pointer flex flex-col items-center justify-center min-w-[75px] hover:bg-red-500/10 hover:border-red-500/30 hover:text-red-400 w-full"
@@ -1961,6 +2070,26 @@ export default function App() {
                   </div>
 
                   <div className="flex flex-wrap gap-2 items-center">
+                    <button
+                      onClick={handleToggleRequestPhase}
+                      className={`inline-flex items-center gap-1.5 px-3 py-1 transition text-[10px] uppercase font-black tracking-widest rounded-lg cursor-pointer border ${
+                        isRequestPhaseLocked
+                          ? 'bg-red-500/10 border-red-500/20 text-red-400 hover:bg-red-500/20'
+                          : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+                      }`}
+                    >
+                      {isRequestPhaseLocked ? (
+                        <>
+                          <Lock className="w-3 h-3 text-red-400" />
+                          <span>Request Phase: Ended</span>
+                        </>
+                      ) : (
+                        <>
+                          <Unlock className="w-3 h-3 text-emerald-400 animate-pulse" />
+                          <span>Request Phase: Active</span>
+                        </>
+                      )}
+                    </button>
                     <button
                       onClick={() => setUserRole('user')}
                       className="px-2.5 py-1 rounded bg-brand-yellow hover:brightness-110 text-slate-950 font-black transition text-[10px] cursor-pointer"
@@ -2855,7 +2984,22 @@ export default function App() {
                           <LogIn className="w-4 h-4" />
                           <span>Sign In with Google</span>
                         </button>
-                        <p className="text-[9px] text-slate-400 text-center leading-normal">
+                        
+                        {/* LINE / Instagram Browser warning card */}
+                        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3 text-left space-y-1.5">
+                          <p className="text-[10px] font-black text-amber-400 uppercase tracking-wider flex items-center gap-1">
+                            <Instagram className="w-3.5 h-3.5 shrink-0" />
+                            <span>สําหรับผู้ใช้ LINE / Instagram / FB</span>
+                          </p>
+                          <p className="text-[9px] text-slate-350 leading-relaxed">
+                            เนื่องจากนโยบายความปลอดภัยสูงสุดของ Google ระบบล็อกอินจะไม่สามารถกดยืนยันตัวภายในเบราวเซอร์ของแอปโซเชียลตรงๆ ได้
+                          </p>
+                          <p className="text-[9px] text-brand-yellow font-bold leading-normal">
+                            💡 วิธีแก้ไข: กรุณากดปุ่มเมนูจุดสามจุด <span className="font-extrabold">(...)</span> หรือสัญลักษณ์แชร์ที่มุมจอ แล้วเลือก <span className="underline">"เปิดใน Safari"</span> หรือ <span className="underline">"เปิดใน Chrome" (Open in Browser)</span>
+                          </p>
+                        </div>
+
+                        <p className="text-[9px] text-slate-400 text-center leading-normal pt-1">
                           To access both <strong>Organizer</strong> and <strong>Dancer</strong> views, you must authenticate securely via Google as <strong className="text-white">Digimon.Angelique@gmail.com</strong>.
                         </p>
                       </>
