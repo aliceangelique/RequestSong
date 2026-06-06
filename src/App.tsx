@@ -2600,9 +2600,14 @@ export default function App() {
                                 {group.voterName} <span className="text-[9px] text-slate-500">({group.voterEmail})</span>
                               </div>
                             </div>
-                            <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
-                              {group.songs.length} voted
-                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
+                                {group.songs.length} voted
+                              </span>
+                              <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-405 text-blue-400 text-[8px] font-black uppercase">
+                                {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} in playlist
+                              </span>
+                            </div>
                           </div>
 
                           {/* Group Songs */}
@@ -3109,9 +3114,14 @@ export default function App() {
                                           </span>
                                         </div>
                                       </div>
-                                      <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase">
-                                        {group.songs.length} {group.songs.length === 1 ? 'Vote Cast' : 'Votes Cast'}
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase">
+                                          {group.songs.length} {group.songs.length === 1 ? 'Vote Cast' : 'Votes Cast'}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-405 text-blue-400 text-[9px] font-black uppercase">
+                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                        </span>
+                                      </div>
                                     </div>
                                   </td>
                                 </tr>
