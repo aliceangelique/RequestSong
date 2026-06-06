@@ -2471,7 +2471,10 @@ export default function App() {
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
-                      Approved: {requests.filter((r) => r.status === 'approved' || r.status === 'played').length}
+                      Approved: {requests.filter((r) => r.status === 'approved').length}
+                    </span>
+                    <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                      Already Played: {requests.filter((r) => r.status === 'played').length}
                     </span>
                     <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400">
                       Pending: {requests.filter((r) => r.status === 'pending' || !r.status).length}
@@ -2546,8 +2549,13 @@ export default function App() {
                                   {group.songs.length} {group.songs.length === 1 ? 'Track' : 'Tracks'} Suggested
                                 </span>
                                 <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
-                                  {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                  {group.songs.filter(s => s.status === 'approved').length} In Playlist
                                 </span>
+                                {group.songs.some(s => s.status === 'played') && (
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[8px] font-black uppercase">
+                                    {group.songs.filter(s => s.status === 'played').length} Played
+                                  </span>
+                                )}
                                 {isExpanded ? (
                                   <ChevronUp className="w-3.5 h-3.5 text-slate-405 text-slate-400 transition-transform" />
                                 ) : (
@@ -2603,7 +2611,11 @@ export default function App() {
 
                                     {/* Actions footer */}
                                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                                      {req.status === 'approved' || req.status === 'played' ? (
+                                      {req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                          Already Played
+                                        </span>
+                                      ) : req.status === 'approved' ? (
                                         <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                           In Playlist
                                         </span>
@@ -2613,25 +2625,64 @@ export default function App() {
                                         </span>
                                       )}
 
-                                      <div className="flex gap-1.5">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Clock className="w-2.5 h-2.5" />
-                                            <span>Set Pending</span>
-                                          </button>
+                                      <div className="flex gap-1">
+                                        {req.status === 'played' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
+                                        ) : req.status === 'approved' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Played</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-850 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
                                         ) : (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Check className="w-2.5 h-2.5" />
-                                            <span>Add Playlist</span>
-                                          </button>
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-950/60 border border-purple-800 text-[9px] text-purple-300 font-bold transition hover:bg-purple-900 flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Play</span>
+                                            </button>
+                                          </>
                                         )}
 
                                         <button
@@ -2680,8 +2731,13 @@ export default function App() {
                                   {group.songs.length} voted
                                 </span>
                                 <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase">
-                                  {group.songs.filter((s) => s.status === 'approved' || s.status === 'played').length} in playlist
+                                  {group.songs.filter((s) => s.status === 'approved').length} in playlist
                                 </span>
+                                {group.songs.some(s => s.status === 'played') && (
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[8px] font-black uppercase">
+                                    {group.songs.filter((s) => s.status === 'played').length} played
+                                  </span>
+                                )}
                                 {isExpanded ? (
                                   <ChevronUp className="w-3.5 h-3.5 text-slate-400 transition-transform" />
                                 ) : (
@@ -2739,7 +2795,11 @@ export default function App() {
 
                                     {/* Actions footer */}
                                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                                      {req.status === 'approved' || req.status === 'played' ? (
+                                      {req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                          Already Played
+                                        </span>
+                                      ) : req.status === 'approved' ? (
                                         <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                           In Playlist
                                         </span>
@@ -2749,25 +2809,64 @@ export default function App() {
                                         </span>
                                       )}
 
-                                      <div className="flex gap-1.5">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Clock className="w-2.5 h-2.5" />
-                                            <span>Set Pending</span>
-                                          </button>
+                                      <div className="flex gap-1">
+                                        {req.status === 'played' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
+                                        ) : req.status === 'approved' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Played</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-850 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
                                         ) : (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Check className="w-2.5 h-2.5" />
-                                            <span>Add Playlist</span>
-                                          </button>
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-950/60 border border-purple-800 text-[9px] text-purple-300 font-bold transition hover:bg-purple-900 flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Play</span>
+                                            </button>
+                                          </>
                                         )}
 
                                         <button
@@ -2816,8 +2915,13 @@ export default function App() {
                                   {group.songs.length} requested
                                 </span>
                                 <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-405 text-blue-400 text-[8px] font-black uppercase">
-                                  {group.songs.filter((s) => s.status === 'approved' || s.status === 'played').length} in playlist
+                                  {group.songs.filter((s) => s.status === 'approved').length} in playlist
                                 </span>
+                                {group.songs.some(s => s.status === 'played') && (
+                                  <span className="px-1.5 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[8px] font-black uppercase">
+                                    {group.songs.filter((s) => s.status === 'played').length} played
+                                  </span>
+                                )}
                                 {isExpanded ? (
                                   <ChevronUp className="w-3.5 h-3.5 text-slate-400 transition-transform" />
                                 ) : (
@@ -2873,7 +2977,11 @@ export default function App() {
 
                                     {/* Actions footer */}
                                     <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                                      {req.status === 'approved' || req.status === 'played' ? (
+                                      {req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                          Already Played
+                                        </span>
+                                      ) : req.status === 'approved' ? (
                                         <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                           In Playlist
                                         </span>
@@ -2883,25 +2991,64 @@ export default function App() {
                                         </span>
                                       )}
 
-                                      <div className="flex gap-1.5">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Clock className="w-2.5 h-2.5" />
-                                            <span>Set Pending</span>
-                                          </button>
+                                      <div className="flex gap-1">
+                                        {req.status === 'played' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
+                                        ) : req.status === 'approved' ? (
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Played</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                              className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-850 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Clock className="w-2.5 h-2.5" />
+                                              <span>Pending</span>
+                                            </button>
+                                          </>
                                         ) : (
-                                          <button
-                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                            type="button"
-                                          >
-                                            <Check className="w-2.5 h-2.5" />
-                                            <span>Add Playlist</span>
-                                          </button>
+                                          <>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                              className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <Check className="w-2.5 h-2.5" />
+                                              <span>Playlist</span>
+                                            </button>
+                                            <button
+                                              onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                              className="px-2 py-1 rounded bg-purple-950/60 border border-purple-800 text-[9px] text-purple-300 font-bold transition hover:bg-purple-900 flex items-center gap-0.5 cursor-pointer"
+                                              type="button"
+                                            >
+                                              <CheckCircle className="w-2.5 h-2.5" />
+                                              <span>Play</span>
+                                            </button>
+                                          </>
                                         )}
 
                                         <button
@@ -2994,7 +3141,11 @@ export default function App() {
 
                           {/* Actions footer */}
                           <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                            {req.status === 'approved' || req.status === 'played' ? (
+                            {req.status === 'played' ? (
+                              <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-purple-500/10 text-purple-400 border border-purple-500/20">
+                                Already Played
+                              </span>
+                            ) : req.status === 'approved' ? (
                               <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                                 In Playlist
                               </span>
@@ -3004,25 +3155,64 @@ export default function App() {
                               </span>
                             )}
 
-                            <div className="flex gap-1.5">
-                              {req.status === 'approved' || req.status === 'played' ? (
-                                <button
-                                  onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                  className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                  type="button"
-                                >
-                                  <Clock className="w-2.5 h-2.5" />
-                                  <span>Pending</span>
-                                </button>
+                            <div className="flex gap-1">
+                              {req.status === 'played' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                    className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <Check className="w-2.5 h-2.5" />
+                                    <span>Playlist</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                    className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <Clock className="w-2.5 h-2.5" />
+                                    <span>Pending</span>
+                                  </button>
+                                </>
+                              ) : req.status === 'approved' ? (
+                                <>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                    className="px-2 py-1 rounded bg-purple-600 hover:bg-purple-500 text-white text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <CheckCircle className="w-2.5 h-2.5" />
+                                    <span>Played</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                    className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-850 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <Clock className="w-2.5 h-2.5" />
+                                    <span>Pending</span>
+                                  </button>
+                                </>
                               ) : (
-                                <button
-                                  onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                  className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                  type="button"
-                                >
-                                  <Check className="w-2.5 h-2.5" />
-                                  <span>Playlist</span>
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                    className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <Check className="w-2.5 h-2.5" />
+                                    <span>Playlist</span>
+                                  </button>
+                                  <button
+                                    onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                    className="px-2 py-1 rounded bg-purple-950/60 border border-purple-800 text-[9px] text-purple-300 font-bold transition hover:bg-purple-900 flex items-center gap-0.5 cursor-pointer"
+                                    type="button"
+                                  >
+                                    <CheckCircle className="w-2.5 h-2.5" />
+                                    <span>Play</span>
+                                  </button>
+                                </>
                               )}
 
                               <button
@@ -3095,8 +3285,13 @@ export default function App() {
                                           {group.songs.length} {group.songs.length === 1 ? 'Track' : 'Tracks'} Suggested
                                         </span>
                                         <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
-                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                          {group.songs.filter(s => s.status === 'approved').length} In Playlist
                                         </span>
+                                        {group.songs.some(s => s.status === 'played') && (
+                                          <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[9px] font-black uppercase">
+                                            {group.songs.filter(s => s.status === 'played').length} Played
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
@@ -3150,8 +3345,12 @@ export default function App() {
                                       </td>
 
                                       <td className="py-3 px-1">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-405 text-emerald-400 border border-emerald-500/20">
+                                        {req.status === 'played' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                                            Played
+                                          </span>
+                                        ) : req.status === 'approved' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                                             In Playlist
                                           </span>
                                         ) : (
@@ -3163,27 +3362,69 @@ export default function App() {
 
                                       <td className="py-3 px-1 text-right">
                                         <div className="inline-flex gap-1.5 justify-end">
-                                          {/* Toggle Status Button (In Playlist or Pending) */}
-                                          {req.status === 'approved' || req.status === 'played' ? (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                              className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-405 text-slate-400 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
-                                              title="Set status to Pending / Consider"
-                                              type="button"
-                                            >
-                                              <Clock className="w-3 h-3 text-slate-505" />
-                                              <span>Pending</span>
-                                            </button>
+                                          {req.status === 'played' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Set status to Approved in Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
+                                          ) : req.status === 'approved' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 hover:scale-[1.03] text-white text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-purple-500/10"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Mark Played</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
                                           ) : (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                              className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
-                                              title="Set status to In Playlist"
-                                              type="button"
-                                            >
-                                              <Check className="w-3 h-3" />
-                                              <span>In Playlist</span>
-                                            </button>
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Add to Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>In Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Play</span>
+                                              </button>
+                                            </>
                                           )}
 
                                           {/* Delete button */}
@@ -3247,8 +3488,13 @@ export default function App() {
                                           {group.songs.length} {group.songs.length === 1 ? 'Vote Cast' : 'Votes Cast'}
                                         </span>
                                         <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase font-semibold">
-                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                          {group.songs.filter(s => s.status === 'approved').length} In Playlist
                                         </span>
+                                        {group.songs.some(s => s.status === 'played') && (
+                                          <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[9px] font-black uppercase font-semibold">
+                                            {group.songs.filter(s => s.status === 'played').length} Played
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
@@ -3305,8 +3551,12 @@ export default function App() {
                                       </td>
 
                                       <td className="py-3 px-1">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-405 text-emerald-400 border border-emerald-500/20">
+                                        {req.status === 'played' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                                            Played
+                                          </span>
+                                        ) : req.status === 'approved' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                                             In Playlist
                                           </span>
                                         ) : (
@@ -3318,27 +3568,69 @@ export default function App() {
 
                                       <td className="py-3 px-1 text-right">
                                         <div className="inline-flex gap-1.5 justify-end">
-                                          {/* Toggle Status Button (In Playlist or Pending) */}
-                                          {req.status === 'approved' || req.status === 'played' ? (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                              className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
-                                              title="Set status to Pending / Consider"
-                                              type="button"
-                                            >
-                                              <Clock className="w-3 h-3 text-slate-500" />
-                                              <span>Pending</span>
-                                            </button>
+                                          {req.status === 'played' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Set status to Approved in Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
+                                          ) : req.status === 'approved' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 hover:scale-[1.03] text-white text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-purple-500/10"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Mark Played</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
                                           ) : (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                              className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
-                                              title="Set status to In Playlist"
-                                              type="button"
-                                            >
-                                              <Check className="w-3 h-3" />
-                                              <span>In Playlist</span>
-                                            </button>
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Add to Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>In Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Play</span>
+                                              </button>
+                                            </>
                                           )}
 
                                           {/* Delete button */}
@@ -3402,8 +3694,13 @@ export default function App() {
                                           {group.songs.length} {group.songs.length === 1 ? 'Request' : 'Requests'}
                                         </span>
                                         <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase font-semibold">
-                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                          {group.songs.filter(s => s.status === 'approved').length} In Playlist
                                         </span>
+                                        {group.songs.some(s => s.status === 'played') && (
+                                          <span className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-purple-400 text-[9px] font-black uppercase font-semibold">
+                                            {group.songs.filter(s => s.status === 'played').length} Played
+                                          </span>
+                                        )}
                                       </div>
                                     </div>
                                   </td>
@@ -3459,8 +3756,12 @@ export default function App() {
                                       </td>
 
                                       <td className="py-3 px-1">
-                                        {req.status === 'approved' || req.status === 'played' ? (
-                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-405 text-emerald-400 border border-emerald-500/20">
+                                        {req.status === 'played' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                                            Played
+                                          </span>
+                                        ) : req.status === 'approved' ? (
+                                          <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                                             In Playlist
                                           </span>
                                         ) : (
@@ -3472,27 +3773,69 @@ export default function App() {
 
                                       <td className="py-3 px-1 text-right">
                                         <div className="inline-flex gap-1.5 justify-end">
-                                          {/* Toggle Status Button (In Playlist or Pending) */}
-                                          {req.status === 'approved' || req.status === 'played' ? (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                              className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
-                                              title="Set status to Pending / Consider"
-                                              type="button"
-                                            >
-                                              <Clock className="w-3 h-3 text-slate-500" />
-                                              <span>Pending</span>
-                                            </button>
+                                          {req.status === 'played' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Set status to Approved in Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
+                                          ) : req.status === 'approved' ? (
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 hover:scale-[1.03] text-white text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-purple-500/10"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Mark Played</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                                className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Set status to Pending"
+                                                type="button"
+                                              >
+                                                <Clock className="w-3 h-3 text-slate-500" />
+                                                <span>Pending</span>
+                                              </button>
+                                            </>
                                           ) : (
-                                            <button
-                                              onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                              className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
-                                              title="Set status to In Playlist"
-                                              type="button"
-                                            >
-                                              <Check className="w-3 h-3" />
-                                              <span>In Playlist</span>
-                                            </button>
+                                            <>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                                className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                                title="Add to Playlist"
+                                                type="button"
+                                              >
+                                                <Check className="w-3 h-3" />
+                                                <span>In Playlist</span>
+                                              </button>
+                                              <button
+                                                onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                                className="px-2.5 py-1 rounded bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                                title="Mark as Already Played"
+                                                type="button"
+                                              >
+                                                <CheckCircle className="w-3 h-3" />
+                                                <span>Play</span>
+                                              </button>
+                                            </>
                                           )}
 
                                           {/* Delete button */}
@@ -3573,7 +3916,11 @@ export default function App() {
                                  </td>
 
                                  <td className="py-3 px-1">
-                                  {req.status === 'approved' || req.status === 'played' ? (
+                                  {req.status === 'played' ? (
+                                    <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-purple-500/15 text-purple-400 border border-purple-500/20">
+                                      Played
+                                    </span>
+                                  ) : req.status === 'approved' ? (
                                     <span className="px-2 py-0.5 rounded text-[10px] uppercase font-black bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
                                       In Playlist
                                     </span>
@@ -3586,27 +3933,69 @@ export default function App() {
 
                                 <td className="py-3 px-1 text-right">
                                   <div className="inline-flex gap-1.5 justify-end">
-                                    {/* Toggle Status Button (In Playlist or Pending) */}
-                                    {req.status === 'approved' || req.status === 'played' ? (
-                                      <button
-                                        onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                        className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
-                                        title="Set status to Pending / Consider"
-                                        type="button"
-                                      >
-                                        <Clock className="w-3 h-3 text-slate-500" />
-                                        <span>Pending</span>
-                                      </button>
+                                    {req.status === 'played' ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                          className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                          title="Set status to Approved in Playlist"
+                                          type="button"
+                                        >
+                                          <Check className="w-3 h-3" />
+                                          <span>Playlist</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                          className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                          title="Set status to Pending"
+                                          type="button"
+                                        >
+                                          <Clock className="w-3 h-3 text-slate-500" />
+                                          <span>Pending</span>
+                                        </button>
+                                      </>
+                                    ) : req.status === 'approved' ? (
+                                      <>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                          className="px-2.5 py-1 rounded bg-purple-600 hover:bg-purple-500 hover:scale-[1.03] text-white text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-purple-500/10"
+                                          title="Mark as Already Played"
+                                          type="button"
+                                        >
+                                          <CheckCircle className="w-3 h-3" />
+                                          <span>Mark Played</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                          className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                          title="Set status to Pending"
+                                          type="button"
+                                        >
+                                          <Clock className="w-3 h-3 text-slate-500" />
+                                          <span>Pending</span>
+                                        </button>
+                                      </>
                                     ) : (
-                                      <button
-                                        onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                        className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
-                                        title="Set status to In Playlist"
-                                        type="button"
-                                      >
-                                        <Check className="w-3 h-3" />
-                                        <span>In Playlist</span>
-                                      </button>
+                                      <>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                          className="px-2.5 py-1 rounded bg-brand-yellow hover:scale-[1.03] text-slate-950 text-[10px] font-black transition cursor-pointer flex items-center gap-1 shadow-sm shadow-brand-yellow/10"
+                                          title="Add to Playlist"
+                                          type="button"
+                                        >
+                                          <Check className="w-3 h-3" />
+                                          <span>In Playlist</span>
+                                        </button>
+                                        <button
+                                          onClick={() => handleAdminStatusUpdate(req.id, 'played')}
+                                          className="px-2.5 py-1 rounded bg-purple-950/60 border border-purple-800 text-purple-300 hover:bg-purple-900 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                          title="Mark as Already Played"
+                                          type="button"
+                                        >
+                                          <CheckCircle className="w-3 h-3" />
+                                          <span>Play</span>
+                                        </button>
+                                      </>
                                     )}
 
                                     {/* Delete button */}
