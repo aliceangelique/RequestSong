@@ -43,7 +43,9 @@ import {
   Lock,
   Unlock,
   WifiOff,
-  Wifi
+  Wifi,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -270,6 +272,17 @@ export default function App() {
 
   // Organizer view mode: 'ranked' (default), 'grouped' (grouped by requester), or 'voter' (grouped by voter)
   const [organizerViewMode, setOrganizerViewMode] = useState<'ranked' | 'grouped' | 'voter' | 'artist'>('ranked');
+
+  // Track expanded accordion groups in the organizer view (key: group name/key, value: boolean)
+  // By default, groups will be folded/collapsed, but can be toggled or batch expanded/collapsed.
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => ({
+      ...prev,
+      [groupKey]: !prev[groupKey]
+    }));
+  };
 
   // Computed current user derived from live Firebase context, strictly requiring Google Authentication
   const currentUser = useMemo(() => {
@@ -2391,12 +2404,12 @@ export default function App() {
                 </div>
 
                 {/* Sub-Control Row with View Mode Toggles & Stats */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pt-1">
                   {/* View mode toggle */}
-                  <div className="inline-flex items-center bg-slate-950 border border-slate-850 p-0.5 rounded-xl text-[10px] font-bold overflow-x-auto max-w-full">
+                  <div className="flex flex-wrap items-center bg-slate-950 border border-slate-850 p-1 rounded-xl text-[10px] font-bold gap-1 w-full lg:w-auto no-scrollbar">
                     <button
                       onClick={() => setOrganizerViewMode('ranked')}
-                      className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none ${
+                      className={`flex-1 lg:flex-none px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none text-center ${
                         organizerViewMode === 'ranked'
                           ? 'bg-brand-yellow text-slate-950 font-black'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
@@ -2407,36 +2420,36 @@ export default function App() {
                     </button>
                     <button
                       onClick={() => setOrganizerViewMode('grouped')}
-                      className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none ${
+                      className={`flex-1 lg:flex-none px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none text-center ${
                         organizerViewMode === 'grouped'
                           ? 'bg-brand-yellow text-slate-950 font-black'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
                       }`}
                       type="button"
                     >
-                      👥 Grouped by Requester ({groupedByRequesterRequests.length})
+                      👥 By Requester ({groupedByRequesterRequests.length})
                     </button>
                     <button
                       onClick={() => setOrganizerViewMode('voter')}
-                      className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none ${
+                      className={`flex-1 lg:flex-none px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none text-center ${
                         organizerViewMode === 'voter'
                           ? 'bg-brand-yellow text-slate-950 font-black'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
                       }`}
                       type="button"
                     >
-                      🗳️ Grouped by Voter ({groupedByVoterRequests.length})
+                      🗳️ By Voter ({groupedByVoterRequests.length})
                     </button>
                     <button
                       onClick={() => setOrganizerViewMode('artist')}
-                      className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none ${
+                      className={`flex-1 lg:flex-none px-3 py-1.5 rounded-lg transition whitespace-nowrap cursor-pointer select-none text-center ${
                         organizerViewMode === 'artist'
                           ? 'bg-brand-yellow text-slate-950 font-black'
                           : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/40'
                       }`}
                       type="button"
                     >
-                      🎤 Grouped by Artist ({groupedByArtistRequests.length})
+                      🎤 By Artist ({groupedByArtistRequests.length})
                     </button>
                   </div>
 
@@ -2463,6 +2476,43 @@ export default function App() {
                     <span className="px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400">
                       Pending: {requests.filter((r) => r.status === 'pending' || !r.status).length}
                     </span>
+
+                    {organizerViewMode !== 'ranked' && (
+                      <div className="flex items-center gap-1.5 ml-1 border-l border-slate-800 pl-2">
+                        <button
+                          onClick={() => {
+                            const keys: Record<string, boolean> = {};
+                            if (organizerViewMode === 'artist') {
+                              groupedByArtistRequests.forEach((g) => {
+                                keys[`artist-${g.artistName.toLowerCase()}`] = true;
+                              });
+                            } else if (organizerViewMode === 'voter') {
+                              groupedByVoterRequests.forEach((g) => {
+                                keys[`voter-${g.voterId}`] = true;
+                              });
+                            } else if (organizerViewMode === 'grouped') {
+                              groupedByRequesterRequests.forEach((g) => {
+                                keys[`requester-${g.creatorEmail}`] = true;
+                              });
+                            }
+                            setExpandedGroups(keys);
+                          }}
+                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-slate-300 border border-slate-800 font-extrabold cursor-pointer transition uppercase text-[8px]"
+                          title="Unfold all grouping sections"
+                          type="button"
+                        >
+                          📂 Unfold All
+                        </button>
+                        <button
+                          onClick={() => setExpandedGroups({})}
+                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 active:bg-slate-950 text-slate-300 border border-slate-800 font-extrabold cursor-pointer transition uppercase text-[8px]"
+                          title="Fold all grouping sections"
+                          type="button"
+                        >
+                          📁 Fold All
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2474,113 +2524,133 @@ export default function App() {
                         No tracks match current inquiry parameters or no artist suggestions exist.
                       </div>
                     ) : (
-                      groupedByArtistRequests.map((group) => (
-                        <div key={group.artistName} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-850">
-                          {/* Group Header */}
-                          <div className="p-3 bg-slate-950/80 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-[10px] font-black">
-                                🎤
+                      groupedByArtistRequests.map((group) => {
+                        const isExpanded = !!expandedGroups[`artist-${group.artistName.toLowerCase()}`];
+                        return (
+                          <div key={group.artistName} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden">
+                            {/* Group Header */}
+                            <div
+                              onClick={() => toggleGroup(`artist-${group.artistName.toLowerCase()}`)}
+                              className="p-3 bg-slate-950/80 hover:bg-slate-900/60 flex items-center justify-between gap-2 cursor-pointer transition select-none"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-[10px] font-black">
+                                  🎤
+                                </div>
+                                <div className="text-[11px] font-bold text-white">
+                                  {group.artistName}
+                                </div>
                               </div>
-                              <div className="text-[11px] font-bold text-white">
-                                {group.artistName}
+                              <div className="flex items-center gap-1.5 flex-wrap flex-shrink-0">
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase">
+                                  {group.songs.length} {group.songs.length === 1 ? 'Track' : 'Tracks'} Suggested
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
+                                  {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                </span>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5 text-slate-405 text-slate-400 transition-transform" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-405 text-slate-400 transition-transform" />
+                                )}
                               </div>
                             </div>
-                            <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase">
-                              {group.songs.length} suggestions
-                            </span>
-                          </div>
 
-                          {/* Group Songs */}
-                          {group.songs.map((req, miniIdx) => (
-                            <div key={req.id} className="p-3 space-y-2.5">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
-                                    <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                            {/* Group Songs Accordion content */}
+                            {isExpanded && (
+                              <div className="divide-y divide-slate-850 border-t border-slate-800 bg-slate-950/20">
+                                {group.songs.map((req, miniIdx) => (
+                                  <div key={req.id} className="p-3 space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
+                                          <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                                        </div>
+                                        <p className="text-[10px] text-slate-400">By: {req.creatorName}</p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingVotersSong(req)}
+                                        className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
+                                        title="Click to view voters breakdown"
+                                      >
+                                        {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
+                                      </button>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                      {req.dancePart && req.dancePart !== 'none' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
+                                          🎯 {req.dancePart}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500 text-[9px]">No segment spec</span>
+                                      )}
+
+                                      {req.youtubeUrl && (
+                                        <a
+                                          href={req.youtubeUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                          <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {/* Actions footer */}
+                                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                                      {req.status === 'approved' || req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                          In Playlist
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
+                                          Consider
+                                        </span>
+                                      )}
+
+                                      <div className="flex gap-1.5">
+                                        {req.status === 'approved' || req.status === 'played' ? (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Clock className="w-2.5 h-2.5" />
+                                            <span>Set Pending</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>Add Playlist</span>
+                                          </button>
+                                        )}
+
+                                        <button
+                                          onClick={() => handleAdminDeleteSource(req.id)}
+                                          className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
+                                          type="button"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <p className="text-[10px] text-slate-400">By: {req.creatorName}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingVotersSong(req)}
-                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
-                                  title="Click to view voters breakdown"
-                                >
-                                  {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
-                                </button>
+                                ))}
                               </div>
-
-                              <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                                {req.dancePart && req.dancePart !== 'none' ? (
-                                  <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
-                                    🎯 {req.dancePart}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500 text-[9px]">No segment spec</span>
-                                )}
-
-                                {req.youtubeUrl && (
-                                  <a
-                                    href={req.youtubeUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
-                                  >
-                                    <ExternalLink className="w-2.5 h-2.5" />
-                                    <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
-                                  </a>
-                                )}
-                              </div>
-
-                              {/* Actions footer */}
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                                {req.status === 'approved' || req.status === 'played' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                    In Playlist
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
-                                    Consider
-                                  </span>
-                                )}
-
-                                <div className="flex gap-1.5">
-                                  {req.status === 'approved' || req.status === 'played' ? (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                      className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Clock className="w-2.5 h-2.5" />
-                                      <span>Set Pending</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                      className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Check className="w-2.5 h-2.5" />
-                                      <span>Add Playlist</span>
-                                    </button>
-                                  )}
-
-                                  <button
-                                    onClick={() => handleAdminDeleteSource(req.id)}
-                                    className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
-                                    type="button"
-                                  >
-                                    <Trash2 className="w-2.5 h-2.5" />
-                                    <span>Delete</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))
+                            )}
+                          </div>
+                        );
+                      })
                     )
                   ) : organizerViewMode === 'voter' ? (
                     groupedByVoterRequests.length === 0 ? (
@@ -2588,120 +2658,135 @@ export default function App() {
                         No tracks match current inquiry parameters or no votes have been cast.
                       </div>
                     ) : (
-                      groupedByVoterRequests.map((group) => (
-                        <div key={group.voterId} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-850">
-                          {/* Group Header */}
-                          <div className="p-3 bg-slate-950/80 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[9px] font-black">
-                                {group.voterName.charAt(0).toUpperCase()}
+                      groupedByVoterRequests.map((group) => {
+                        const isExpanded = !!expandedGroups[`voter-${group.voterId}`];
+                        return (
+                          <div key={group.voterId} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden">
+                            {/* Group Header */}
+                            <div
+                              onClick={() => toggleGroup(`voter-${group.voterId}`)}
+                              className="p-3 bg-slate-950/80 hover:bg-slate-900/60 flex items-center justify-between gap-2 cursor-pointer transition select-none"
+                            >
+                              <div className="flex items-center gap-2 font-black">
+                                <div className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[9px] font-black">
+                                  {group.voterName.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="text-[11px] font-bold text-white">
+                                  {group.voterName} <span className="text-[9px] text-slate-500 font-normal">({group.voterEmail})</span>
+                                </div>
                               </div>
-                              <div className="text-[11px] font-bold text-white">
-                                {group.voterName} <span className="text-[9px] text-slate-500">({group.voterEmail})</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
+                                  {group.songs.length} voted
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[8px] font-black uppercase">
+                                  {group.songs.filter((s) => s.status === 'approved' || s.status === 'played').length} in playlist
+                                </span>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                                )}
                               </div>
                             </div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[8px] font-black uppercase">
-                                {group.songs.length} voted
-                              </span>
-                              <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-405 text-blue-400 text-[8px] font-black uppercase">
-                                {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} in playlist
-                              </span>
-                            </div>
-                          </div>
 
-                          {/* Group Songs */}
-                          {group.songs.map((req, miniIdx) => (
-                            <div key={req.id} className="p-3 space-y-2.5">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
-                                    <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                            {/* Group Songs Accordion content */}
+                            {isExpanded && (
+                              <div className="divide-y divide-slate-850 border-t border-slate-800 bg-slate-950/20">
+                                {group.songs.map((req, miniIdx) => (
+                                  <div key={req.id} className="p-3 space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
+                                          <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                                        </div>
+                                        <p className="text-[10px] text-slate-405 text-slate-400 font-medium">{req.artist}</p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingVotersSong(req)}
+                                        className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
+                                        title="Click to view voters breakdown"
+                                      >
+                                        {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
+                                      </button>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                      {req.dancePart && req.dancePart !== 'none' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
+                                          🎯 {req.dancePart}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500 text-[9px]">No segment spec</span>
+                                      )}
+
+                                      <span className="text-slate-500 text-[9px]">By: {req.creatorName}</span>
+
+                                      {req.youtubeUrl && (
+                                        <a
+                                          href={req.youtubeUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                          <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {/* Actions footer */}
+                                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                                      {req.status === 'approved' || req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                          In Playlist
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
+                                          Consider
+                                        </span>
+                                      )}
+
+                                      <div className="flex gap-1.5">
+                                        {req.status === 'approved' || req.status === 'played' ? (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Clock className="w-2.5 h-2.5" />
+                                            <span>Set Pending</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>Add Playlist</span>
+                                          </button>
+                                        )}
+
+                                        <button
+                                          onClick={() => handleAdminDeleteSource(req.id)}
+                                          className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
+                                          type="button"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <p className="text-[10px] text-slate-405 text-slate-400 font-medium">{req.artist}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingVotersSong(req)}
-                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
-                                  title="Click to view voters breakdown"
-                                >
-                                  {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
-                                </button>
+                                ))}
                               </div>
-
-                              <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                                {req.dancePart && req.dancePart !== 'none' ? (
-                                  <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
-                                    🎯 {req.dancePart}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500 text-[9px]">No segment spec</span>
-                                )}
-
-                                <span className="text-slate-500 text-[9px]">By: {req.creatorName}</span>
-
-                                {req.youtubeUrl && (
-                                  <a
-                                    href={req.youtubeUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
-                                  >
-                                    <ExternalLink className="w-2.5 h-2.5" />
-                                    <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
-                                  </a>
-                                )}
-                              </div>
-
-                              {/* Actions footer */}
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
-                                {req.status === 'approved' || req.status === 'played' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                    In Playlist
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
-                                    Consider
-                                  </span>
-                                )}
-
-                                <div className="flex gap-1.5">
-                                  {req.status === 'approved' || req.status === 'played' ? (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                      className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Clock className="w-2.5 h-2.5" />
-                                      <span>Set Pending</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                      className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Check className="w-2.5 h-2.5" />
-                                      <span>Add Playlist</span>
-                                    </button>
-                                  )}
-
-                                  <button
-                                    onClick={() => handleAdminDeleteSource(req.id)}
-                                    className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
-                                    type="button"
-                                  >
-                                    <Trash2 className="w-2.5 h-2.5" />
-                                    <span>Delete</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))
+                            )}
+                          </div>
+                        );
+                      })
                     )
                   ) : organizerViewMode === 'grouped' ? (
                     groupedByRequesterRequests.length === 0 ? (
@@ -2709,113 +2794,133 @@ export default function App() {
                         No tracks match current inquiry parameters.
                       </div>
                     ) : (
-                      groupedByRequesterRequests.map((group) => (
-                        <div key={group.creatorEmail + group.creatorName} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden divide-y divide-slate-850">
-                          {/* Group Header */}
-                          <div className="p-3 bg-slate-950/80 flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-full bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20 flex items-center justify-center text-[9px] font-black">
-                                {group.creatorName.charAt(0).toUpperCase()}
+                      groupedByRequesterRequests.map((group) => {
+                        const isExpanded = !!expandedGroups[`requester-${group.creatorEmail}`];
+                        return (
+                          <div key={group.creatorEmail + group.creatorName} className="bg-slate-950/40 rounded-xl border border-slate-800 overflow-hidden">
+                            {/* Group Header */}
+                            <div
+                              onClick={() => toggleGroup(`requester-${group.creatorEmail}`)}
+                              className="p-3 bg-slate-950/80 hover:bg-slate-900/60 flex items-center justify-between gap-2 cursor-pointer transition select-none"
+                            >
+                              <div className="flex items-center gap-2">
+                                <div className="w-5 h-5 rounded-full bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20 flex items-center justify-center text-[9px] font-black">
+                                  {group.creatorName.charAt(0).toUpperCase()}
+                                </div>
+                                <div className="text-[11px] font-bold text-white">
+                                  {group.creatorName} <span className="text-[9px] text-slate-500 font-normal">({group.creatorEmail})</span>
+                                </div>
                               </div>
-                              <div className="text-[11px] font-bold text-white">
-                                {group.creatorName} <span className="text-[9px] text-slate-500">({group.creatorEmail})</span>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 border border-brand-yellow/20 text-brand-yellow text-[8px] font-black uppercase">
+                                  {group.songs.length} requested
+                                </span>
+                                <span className="px-1.5 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-405 text-blue-400 text-[8px] font-black uppercase">
+                                  {group.songs.filter((s) => s.status === 'approved' || s.status === 'played').length} in playlist
+                                </span>
+                                {isExpanded ? (
+                                  <ChevronUp className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                                ) : (
+                                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 transition-transform" />
+                                )}
                               </div>
                             </div>
-                            <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 border border-brand-yellow/20 text-brand-yellow text-[8px] font-black uppercase">
-                              {group.songs.length} requested
-                            </span>
-                          </div>
 
-                          {/* Group Songs */}
-                          {group.songs.map((req, miniIdx) => (
-                            <div key={req.id} className="p-3 space-y-2.5">
-                              <div className="flex items-start justify-between gap-2">
-                                <div className="space-y-0.5">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
-                                    <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                            {/* Group Songs Accordion content */}
+                            {isExpanded && (
+                              <div className="divide-y divide-slate-850 border-t border-slate-800 bg-slate-950/20">
+                                {group.songs.map((req, miniIdx) => (
+                                  <div key={req.id} className="p-3 space-y-2.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="space-y-0.5">
+                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                          <span className="text-[9px] font-bold text-slate-400">#{miniIdx + 1}</span>
+                                          <h5 className="text-xs font-bold text-white leading-tight">{req.title}</h5>
+                                        </div>
+                                        <p className="text-[10px] text-slate-405 text-slate-400 font-medium">{req.artist}</p>
+                                      </div>
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingVotersSong(req)}
+                                        className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
+                                        title="Click to view voters breakdown"
+                                      >
+                                        {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
+                                      </button>
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2 text-[10px]">
+                                      {req.dancePart && req.dancePart !== 'none' ? (
+                                        <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
+                                          🎯 {req.dancePart}
+                                        </span>
+                                      ) : (
+                                        <span className="text-slate-500 text-[9px]">No segment spec</span>
+                                      )}
+
+                                      {req.youtubeUrl && (
+                                        <a
+                                          href={req.youtubeUrl}
+                                          target="_blank"
+                                          rel="noreferrer"
+                                          className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
+                                        >
+                                          <ExternalLink className="w-2.5 h-2.5" />
+                                          <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
+                                        </a>
+                                      )}
+                                    </div>
+
+                                    {/* Actions footer */}
+                                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+                                      {req.status === 'approved' || req.status === 'played' ? (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                          In Playlist
+                                        </span>
+                                      ) : (
+                                        <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
+                                          Consider
+                                        </span>
+                                      )}
+
+                                      <div className="flex gap-1.5">
+                                        {req.status === 'approved' || req.status === 'played' ? (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
+                                            className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Clock className="w-2.5 h-2.5" />
+                                            <span>Set Pending</span>
+                                          </button>
+                                        ) : (
+                                          <button
+                                            onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
+                                            className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
+                                            type="button"
+                                          >
+                                            <Check className="w-2.5 h-2.5" />
+                                            <span>Add Playlist</span>
+                                          </button>
+                                        )}
+
+                                        <button
+                                          onClick={() => handleAdminDeleteSource(req.id)}
+                                          className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-405 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
+                                          type="button"
+                                        >
+                                          <Trash2 className="w-2.5 h-2.5" />
+                                          <span>Delete</span>
+                                        </button>
+                                      </div>
+                                    </div>
                                   </div>
-                                  <p className="text-[10px] text-slate-405 text-slate-400 font-medium">{req.artist}</p>
-                                </div>
-                                <button
-                                  type="button"
-                                  onClick={() => setViewingVotersSong(req)}
-                                  className="inline-block px-1.5 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow font-bold text-[10px] flex-shrink-0 cursor-pointer transition uppercase text-[8px]"
-                                  title="Click to view voters breakdown"
-                                >
-                                  {req.votesCount} {req.votesCount === 1 ? 'vote' : 'votes'}
-                                </button>
+                                ))}
                               </div>
-
-                              <div className="flex flex-wrap items-center gap-2 text-[10px]">
-                                {req.dancePart && req.dancePart !== 'none' ? (
-                                  <span className="px-1.5 py-0.5 rounded bg-brand-yellow/10 text-brand-yellow font-extrabold border border-brand-yellow/20 text-[8px] uppercase">
-                                    🎯 {req.dancePart}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-500 text-[9px]">No segment spec</span>
-                                )}
-
-                                {req.youtubeUrl && (
-                                  <a
-                                    href={req.youtubeUrl}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="inline-flex items-center gap-0.5 text-[9px] text-blue-400 hover:underline"
-                                  >
-                                    <ExternalLink className="w-2.5 h-2.5" />
-                                    <span>Youtube ref {req.timestamp && `(${req.timestamp})`}</span>
-                                  </a>
-                                )}
-                              </div>
-
-                              {/* Actions footer */}
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-905 border-slate-800">
-                                {req.status === 'approved' || req.status === 'played' ? (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                                    In Playlist
-                                  </span>
-                                ) : (
-                                  <span className="px-1.5 py-0.5 rounded text-[8px] uppercase font-black bg-slate-800 text-slate-300 border border-slate-700">
-                                    Consider
-                                  </span>
-                                )}
-
-                                <div className="flex gap-1.5">
-                                  {req.status === 'approved' || req.status === 'played' ? (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                      className="px-2 py-1 rounded bg-slate-950 hover:bg-slate-800 text-slate-400 border border-slate-800 text-[9px] font-bold transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Clock className="w-2.5 h-2.5" />
-                                      <span>Set Pending</span>
-                                    </button>
-                                  ) : (
-                                    <button
-                                      onClick={() => handleAdminStatusUpdate(req.id, 'approved')}
-                                      className="px-2 py-1 rounded bg-brand-yellow text-slate-950 text-[9px] font-black transition flex items-center gap-0.5"
-                                      type="button"
-                                    >
-                                      <Check className="w-2.5 h-2.5" />
-                                      <span>Add Playlist</span>
-                                    </button>
-                                  )}
-
-                                  <button
-                                    onClick={() => handleAdminDeleteSource(req.id)}
-                                    className="px-2 py-1 rounded bg-slate-950 hover:bg-red-500/20 text-red-400 border border-red-500/25 text-[9px] font-bold transition flex items-center gap-0.5"
-                                    type="button"
-                                  >
-                                    <Trash2 className="w-2.5 h-2.5" />
-                                    <span>Delete</span>
-                                  </button>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ))
+                            )}
+                          </div>
+                        );
+                      })
                     )
                   ) : (
                     queryFilteredRequests.length === 0 ? (
@@ -2960,31 +3065,45 @@ export default function App() {
                           </tr>
                         ) : (
                           groupedByArtistRequests.map((group) => {
+                            const isExpanded = !!expandedGroups[`artist-${group.artistName.toLowerCase()}`];
                             return (
                               <Fragment key={group.artistName}>
                                 {/* Artist Group Section Header */}
-                                <tr className="bg-slate-950/50">
+                                <tr
+                                  onClick={() => toggleGroup(`artist-${group.artistName.toLowerCase()}`)}
+                                  className="bg-slate-950/50 hover:bg-slate-900/60 cursor-pointer select-none transition"
+                                >
                                   <td colSpan={7} className="py-3 px-3 border-y border-slate-800">
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex items-center gap-2.5">
                                         <div className="w-6 h-6 rounded-full bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center text-[10px] font-black">
                                           🎤
                                         </div>
-                                        <div>
+                                        <div className="flex items-center gap-1.5">
                                           <span className="font-extrabold text-white text-xs sm:text-sm">
                                             {group.artistName}
                                           </span>
+                                          {isExpanded ? (
+                                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                          ) : (
+                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                          )}
                                         </div>
                                       </div>
-                                      <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-505 border-blue-500/30 text-blue-400 text-[9px] font-black uppercase">
-                                        {group.songs.length} {group.songs.length === 1 ? 'Track' : 'Tracks'} Suggested
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase">
+                                          {group.songs.length} {group.songs.length === 1 ? 'Track' : 'Tracks'} Suggested
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase">
+                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                        </span>
+                                      </div>
                                     </div>
                                   </td>
                                 </tr>
                                 
                                 {/* Songs suggested under this artist */}
-                                {group.songs.map((req, miniIdx) => {
+                                {isExpanded && group.songs.map((req, miniIdx) => {
                                   return (
                                     <tr key={req.id} className="hover:bg-slate-850/15 transition pr-4">
                                       <td className="py-3 px-2 font-mono font-bold text-slate-500 text-center">
@@ -3021,11 +3140,11 @@ export default function App() {
 
                                       <td className="py-3 px-1">
                                         <p className="text-slate-300 font-bold">{req.creatorName}</p>
-                                        <p className="text-[9px] text-slate-500 font-mono mt-0.1">{req.creatorEmail}</p>
+                                        <p className="text-[9px] text-slate-505 text-slate-400 font-mono mt-0.1">{req.creatorEmail}</p>
                                       </td>
 
                                       <td className="py-3 px-1 text-center">
-                                        <button type="button" onClick={() => setViewingVotersSong(req)} className="inline-block px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-800 hover:border-slate-700 text-brand-yellow hover:text-yellow-355 font-bold text-[11px] cursor-pointer transition">
+                                        <button type="button" onClick={() => setViewingVotersSong(req)} className="inline-block px-2 py-0.5 rounded bg-slate-950 hover:bg-slate-900 border border-slate-850 hover:border-slate-700 text-brand-yellow hover:text-yellow-355 font-bold text-[11px] cursor-pointer transition">
                                           {req.votesCount}
                                         </button>
                                       </td>
@@ -3048,11 +3167,11 @@ export default function App() {
                                           {req.status === 'approved' || req.status === 'played' ? (
                                             <button
                                               onClick={() => handleAdminStatusUpdate(req.id, 'pending')}
-                                              className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-855 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                              className="px-2.5 py-1 rounded bg-slate-950 hover:bg-slate-805 hover:bg-slate-800 text-slate-405 text-slate-400 border border-slate-800 text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
                                               title="Set status to Pending / Consider"
                                               type="button"
                                             >
-                                              <Clock className="w-3 h-3 text-slate-500" />
+                                              <Clock className="w-3 h-3 text-slate-505" />
                                               <span>Pending</span>
                                             </button>
                                           ) : (
@@ -3070,7 +3189,7 @@ export default function App() {
                                           {/* Delete button */}
                                           <button
                                             onClick={() => handleAdminDeleteSource(req.id)}
-                                            className="px-2.5 py-1 rounded bg-slate-950 hover:bg-red-500 hover:text-white text-red-400 border border-red-500/20 hover:border-transparent text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                            className="px-2.5 py-1 rounded bg-slate-950 hover:bg-red-500 hover:text-white text-red-405 text-red-100 border border-red-500/20 hover:border-transparent text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
                                             title="Delete track from roster list"
                                             type="button"
                                           >
@@ -3095,30 +3214,39 @@ export default function App() {
                           </tr>
                         ) : (
                           groupedByVoterRequests.map((group) => {
+                            const isExpanded = !!expandedGroups[`voter-${group.voterId}`];
                             return (
                               <Fragment key={group.voterId}>
                                 {/* Voter Group Section Header */}
-                                <tr className="bg-slate-950/50">
+                                <tr
+                                  onClick={() => toggleGroup(`voter-${group.voterId}`)}
+                                  className="bg-slate-950/50 hover:bg-slate-900/60 cursor-pointer select-none transition"
+                                >
                                   <td colSpan={7} className="py-3 px-3 border-y border-slate-800">
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex items-center gap-2.5">
-                                        <div className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[10px] font-black">
+                                        <div className="w-6 h-6 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center justify-center text-[10px] font-black font-semibold">
                                           {group.voterName.charAt(0).toUpperCase()}
                                         </div>
-                                        <div>
+                                        <div className="flex items-center gap-1.5">
                                           <span className="font-extrabold text-white text-xs sm:text-sm">
                                             {group.voterName}
                                           </span>
-                                          <span className="text-[9px] text-slate-505 text-slate-400 font-mono ml-2">
+                                          <span className="text-[9px] text-slate-505 text-slate-400 font-mono ml-1">
                                             ({group.voterEmail})
                                           </span>
+                                          {isExpanded ? (
+                                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                          ) : (
+                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                          )}
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-1.5">
-                                        <span className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-[9px] font-black uppercase">
+                                        <span className="px-2 py-0.5 rounded bg-emerald-555/25 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[9px] font-black uppercase font-semibold">
                                           {group.songs.length} {group.songs.length === 1 ? 'Vote Cast' : 'Votes Cast'}
                                         </span>
-                                        <span className="px-2 py-0.5 rounded bg-blue-500/20 border border-blue-500/30 text-blue-405 text-blue-400 text-[9px] font-black uppercase">
+                                        <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase font-semibold">
                                           {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
                                         </span>
                                       </div>
@@ -3127,7 +3255,7 @@ export default function App() {
                                 </tr>
                                 
                                 {/* Songs voted by this person */}
-                                {group.songs.map((req, miniIdx) => {
+                                {isExpanded && group.songs.map((req, miniIdx) => {
                                   return (
                                     <tr key={req.id} className="hover:bg-slate-850/15 transition pr-4">
                                       <td className="py-3 px-2 font-mono font-bold text-slate-505 text-slate-400 text-center">
@@ -3216,7 +3344,7 @@ export default function App() {
                                           {/* Delete button */}
                                           <button
                                             onClick={() => handleAdminDeleteSource(req.id)}
-                                            className="px-2.5 py-1 rounded bg-slate-950 hover:bg-red-500 hover:text-white text-red-400 border border-red-500/20 hover:border-transparent text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
+                                            className="px-2.5 py-1 rounded bg-slate-950 hover:bg-red-500 hover:text-white text-red-100 border border-red-500/20 hover:border-transparent text-[10px] font-bold transition cursor-pointer flex items-center gap-1"
                                             title="Delete track from roster list"
                                             type="button"
                                           >
@@ -3241,34 +3369,48 @@ export default function App() {
                           </tr>
                         ) : (
                           groupedByRequesterRequests.map((group) => {
+                            const isExpanded = !!expandedGroups[`requester-${group.creatorEmail}`];
                             return (
                               <Fragment key={group.creatorEmail + group.creatorName}>
                                 {/* Requester Group Section Header */}
-                                <tr className="bg-slate-950/50">
+                                <tr
+                                  onClick={() => toggleGroup(`requester-${group.creatorEmail}`)}
+                                  className="bg-slate-950/50 hover:bg-slate-900/60 cursor-pointer select-none transition"
+                                >
                                   <td colSpan={7} className="py-3 px-3 border-y border-slate-800">
                                     <div className="flex items-center justify-between gap-2 flex-wrap">
                                       <div className="flex items-center gap-2.5">
                                         <div className="w-6 h-6 rounded-full bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20 flex items-center justify-center text-[10px] font-black">
                                           {group.creatorName.charAt(0).toUpperCase()}
                                         </div>
-                                        <div>
+                                        <div className="flex items-center gap-1.5">
                                           <span className="font-extrabold text-white text-xs sm:text-sm">
                                             {group.creatorName}
                                           </span>
-                                          <span className="text-[9px] text-slate-500 font-mono ml-2">
+                                          <span className="text-[9px] text-slate-500 font-mono">
                                             ({group.creatorEmail})
                                           </span>
+                                          {isExpanded ? (
+                                            <ChevronUp className="w-3.5 h-3.5 text-slate-400" />
+                                          ) : (
+                                            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                                          )}
                                         </div>
                                       </div>
-                                      <span className="px-2 py-0.5 rounded bg-brand-yellow/10 border border-brand-yellow/20 text-brand-yellow text-[9px] font-black uppercase">
-                                        {group.songs.length} {group.songs.length === 1 ? 'Request' : 'Requests'}
-                                      </span>
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="px-2 py-0.5 rounded bg-brand-yellow/10 border border-brand-yellow/20 text-brand-yellow text-[9px] font-black uppercase font-semibold">
+                                          {group.songs.length} {group.songs.length === 1 ? 'Request' : 'Requests'}
+                                        </span>
+                                        <span className="px-2 py-0.5 rounded bg-blue-500/10 border border-blue-500/20 text-blue-400 text-[9px] font-black uppercase font-semibold">
+                                          {group.songs.filter(s => s.status === 'approved' || s.status === 'played').length} In Playlist
+                                        </span>
+                                      </div>
                                     </div>
                                   </td>
                                 </tr>
                                 
                                 {/* Songs requested by this person */}
-                                {group.songs.map((req, miniIdx) => {
+                                {isExpanded && group.songs.map((req, miniIdx) => {
                                   return (
                                     <tr key={req.id} className="hover:bg-slate-850/15 transition pr-4">
                                       <td className="py-3 px-2 font-mono font-bold text-slate-500 text-center">

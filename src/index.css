@@ -9,3 +9,12 @@
   --color-brand-blue: #1CB0F6;
 }
 
+/* Hide scrollbars for chrome, safari, edge, firefox while preserving scrollable behavior */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+
