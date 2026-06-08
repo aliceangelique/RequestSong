@@ -88,8 +88,8 @@ service cloud.firestore {
         && isValidSongRequest(incoming())
         && incoming().creatorId == request.auth.uid
         && (
-          (!('email' in request.auth.token) && incoming().creatorEmail == "anonymous@randomdance.net")
-          || ('email' in request.auth.token && incoming().creatorEmail == request.auth.token.email)
+          (!('email' in request.auth.token) && incoming().creatorEmail.lower() == "anonymous@randomdance.net")
+          || ('email' in request.auth.token && incoming().creatorEmail.lower() == request.auth.token.email.lower())
         )
         && incoming().status == "pending"
         && incoming().votesCount == 1
@@ -139,7 +139,7 @@ service cloud.firestore {
           isVerified()
           && userId == request.auth.uid
           && isValidVote(incoming())
-          && exists(/databases/$(database)/documents/songRequests/$(requestId))
+          && (exists(/databases/$(database)/documents/songRequests/$(requestId)) || existsAfter(/databases/$(database)/documents/songRequests/$(requestId)))
         );
 
         // Votes can be deleted by standard users if they delete their own vote doc
