@@ -210,6 +210,33 @@ const formatEventTime = (timeStr: string): string => {
   return timeStr;
 };
 
+// Helper to determine if an event has already ended (is in the past)
+const isEventPast = (ev: DanceEvent) => {
+  if (!ev) return false;
+  const timeStr = ev.time;
+  if (!timeStr) return false;
+  try {
+    if (timeStr.includes('|')) {
+      const parts = timeStr.split('|');
+      const datePart = parts[0]; // YYYY-MM-DD
+      const timePart = parts[2] || parts[1]; // End time or Start time
+      if (datePart && timePart) {
+        const dt = new Date(`${datePart}T${timePart}:00`);
+        if (!isNaN(dt.getTime())) {
+          return dt.getTime() < Date.now();
+        }
+      }
+    }
+    const parsed = new Date(timeStr);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.getTime() < Date.now();
+    }
+  } catch (e) {
+    console.error("isEventPast parsing error", e);
+  }
+  return false;
+};
+
 export default function App() {
   // Authentication states
   const [firebaseUser, setFirebaseUser] = useState<User | null>(null);
@@ -229,6 +256,7 @@ export default function App() {
   const [events, setEvents] = useState<DanceEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('event_1');
   const [activeEventId, setActiveEventId] = useState<string>('event_1');
+  const [dancerSelectedEventId, setDancerSelectedEventId] = useState<string>('');
   const [isRequestPhaseLocked, setIsRequestPhaseLocked] = useState<boolean>(false);
   
   // Event inputs
@@ -244,13 +272,51 @@ export default function App() {
   // Active View Mode ('user' for Dance Fans, 'organizer' for DJ Organizer / Admin)
   const [userRole, setUserRole] = useState<'user' | 'organizer'>('user');
 
+  // Memoized lists of upcoming events sorted by closeness to now
+  const upcomingEventsSorted = useMemo(() => {
+    const getEventTimeMs = (ev: DanceEvent) => {
+      const timeStr = ev.time;
+      if (timeStr && timeStr.includes('|')) {
+        const parts = timeStr.split('|');
+        const datePart = parts[0];
+        const timePart = parts[1];
+        if (datePart && timePart) {
+          const dt = new Date(`${datePart}T${timePart}:00`);
+          if (!isNaN(dt.getTime())) return dt.getTime();
+        }
+      }
+      const parsed = new Date(timeStr);
+      if (!isNaN(parsed.getTime())) return parsed.getTime();
+      return Infinity;
+    };
+    return [...events].filter(ev => !isEventPast(ev)).sort((a, b) => getEventTimeMs(a) - getEventTimeMs(b));
+  }, [events]);
+
+  // Find closest upcoming event and initialize/sync dancerSelectedEventId automatically
+  useEffect(() => {
+    if (events && events.length > 0) {
+      if (upcomingEventsSorted.length > 0) {
+        const closest = upcomingEventsSorted[0];
+        setDancerSelectedEventId((prev) => {
+          if (events.some((e) => e.id === prev)) return prev;
+          return closest.id;
+        });
+      } else {
+        setDancerSelectedEventId((prev) => {
+          if (events.some((e) => e.id === prev)) return prev;
+          return activeEventId && events.some(e => e.id === activeEventId) ? activeEventId : events[0].id;
+        });
+      }
+    }
+  }, [events, upcomingEventsSorted, activeEventId]);
+
   // Find which event we should actually display/filter based on current viewer's role
   const effectiveEventId = useMemo(() => {
     if (userRole === 'user') {
-      return activeEventId;
+      return dancerSelectedEventId || activeEventId;
     }
     return selectedEventId;
-  }, [userRole, activeEventId, selectedEventId]);
+  }, [userRole, dancerSelectedEventId, activeEventId, selectedEventId]);
 
   // Input states for song request form
   const [newTitle, setNewTitle] = useState('');
@@ -780,20 +846,10 @@ export default function App() {
 
     let didSucceed = true;
 
-    // Firebase reset active events and requests first to support "We no need history / Replace with new and delete old one"
+    // Firebase: create the new event and update active settings
     if (isFirebaseConfigured && db && !connectionError && currentUser && !currentUser.isSimulated) {
       try {
         const batch = writeBatch(db);
-
-        // Delete all old events on reset
-        events.forEach((ev) => {
-          batch.delete(doc(db, 'danceEvents', ev.id));
-        });
-
-        // Delete all old song requests on reset
-        requests.forEach((req) => {
-          batch.delete(doc(db, 'songRequests', req.id));
-        });
 
         // Set the active focus setting and the new event
         const eventDocRef = doc(db, 'danceEvents', eventId);
@@ -814,7 +870,7 @@ export default function App() {
 
         await batch.commit();
       } catch (err) {
-        console.warn("Failed database reset/overwrite via Firebase, falling back to clean local database overwrite.", err);
+        console.warn("Failed database transaction via Firebase.", err);
         handleFirestoreError(err, OperationType.WRITE, `danceEvents/${eventId}`);
         didSucceed = false;
 
@@ -825,13 +881,14 @@ export default function App() {
     }
 
     if (didSucceed) {
-      // Overwrite local memory states entirely to support "We no need history and focus on single active event"
-      setEvents([freshEvent]);
-      localStorage.setItem('rpd_offline_dance_events', JSON.stringify([freshEvent]));
-      localStorage.removeItem(`rpd_offline_song_requests_${eventId}`);
+      // Append new event to existing event history
+      const nextEvents = [freshEvent, ...events];
+      setEvents(nextEvents);
+      localStorage.setItem('rpd_offline_dance_events', JSON.stringify(nextEvents));
       localStorage.setItem('rpd_active_event_id', eventId);
       setActiveEventId(eventId);
       setSelectedEventId(eventId);
+      setDancerSelectedEventId(eventId);
 
       setNewEventName('');
       setNewEventPlace('');
@@ -864,33 +921,6 @@ export default function App() {
       setActiveEventId(targetId);
       localStorage.setItem('rpd_active_event_id', targetId);
     }
-  };
-
-  // Helper to determine if an event has already ended (is in the past)
-  const isEventPast = (ev: DanceEvent) => {
-    if (!ev) return false;
-    const timeStr = ev.time;
-    if (!timeStr) return false;
-    try {
-      if (timeStr.includes('|')) {
-        const parts = timeStr.split('|');
-        const datePart = parts[0]; // YYYY-MM-DD
-        const timePart = parts[2] || parts[1]; // End time or Start time
-        if (datePart && timePart) {
-          const dt = new Date(`${datePart}T${timePart}:00`);
-          if (!isNaN(dt.getTime())) {
-            return dt.getTime() < Date.now();
-          }
-        }
-      }
-      const parsed = new Date(timeStr);
-      if (!isNaN(parsed.getTime())) {
-        return parsed.getTime() < Date.now();
-      }
-    } catch (e) {
-      console.error("isEventPast parsing error", e);
-    }
-    return false;
   };
 
   // Delete event action (Admins only)
@@ -1524,6 +1554,73 @@ export default function App() {
                 className="space-y-4"
                 id="dancer-dancefloor-view"
               >
+              {/* UPCOMING EVENTS SWAPPER (Dancers only) */}
+              {upcomingEventsSorted.length > 1 && (
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3" id="dancer-upcoming-events-selector">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="space-y-0.5">
+                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-brand-yellow tracking-wider">
+                        <Calendar className="w-3.5 h-3.5" />
+                        Select Upcoming Event Board / เลือกบอร์ดอีเวนต์ประกาศ
+                      </span>
+                      <p className="text-[10px] text-slate-400">
+                        Choose an event below to submit song requests and vote on the play board.
+                      </p>
+                    </div>
+                    {upcomingEventsSorted.length > 1 && (
+                      <span className="inline-flex text-[9px] font-bold text-brand-yellow/85 bg-brand-yellow/10 border border-brand-yellow/20 px-2 py-0.5 rounded-full uppercase tracking-wider self-start sm:self-auto">
+                        {upcomingEventsSorted.length} Upcoming Events Public
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {upcomingEventsSorted.map((ev) => {
+                      const isSelected = ev.id === effectiveEventId;
+                      const isClosest = ev.id === upcomingEventsSorted[0].id;
+                      return (
+                        <button
+                          key={ev.id}
+                          type="button"
+                          onClick={() => setDancerSelectedEventId(ev.id)}
+                          className={`flex items-start text-left p-3 rounded-xl border transition relative duration-200 cursor-pointer select-none ${
+                            isSelected
+                              ? 'bg-slate-950/80 border-brand-yellow shadow-md shadow-brand-yellow/5'
+                              : 'bg-slate-950/30 border-slate-900 text-slate-350 hover:bg-slate-950/80 hover:border-slate-850 hover:text-white'
+                          }`}
+                        >
+                          {isClosest && (
+                            <span className="absolute -top-2 -right-1.5 text-[8px] font-black uppercase bg-brand-yellow text-slate-950 px-2 py-0.5 rounded-full shadow shadow-brand-yellow/25">
+                              Closest / ใกล้สุด
+                            </span>
+                          )}
+                          <div className="mr-3 shrink-0 mt-0.5">
+                            <div className={`p-2 rounded-lg ${
+                              isSelected ? 'bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20' : 'bg-slate-900 text-slate-500 border border-transparent'
+                            }`}>
+                              <Calendar className="w-3.5 h-3.5" />
+                            </div>
+                          </div>
+                          <div className="space-y-1 min-w-0 flex-1">
+                            <h4 className="text-xs font-black truncate text-white">{ev.name}</h4>
+                            <div className="flex flex-col gap-0.5 text-[10px] text-slate-400">
+                              <p className="flex items-center gap-1 text-slate-400 truncate">
+                                <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span className="truncate">{ev.place}</span>
+                              </p>
+                              <p className="flex items-center gap-1 text-slate-400">
+                                <Clock className="w-3 h-3 text-slate-500 shrink-0" />
+                                <span>{formatEventTime(ev.time)}</span>
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* MOBILE/TABLET RESPONSIVE TABS Swapper - only visible on small screens (< lg) */}
               <div className="lg:hidden flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 sticky top-0 z-30 backdrop-blur-md gap-1">
                 <button
