@@ -45,7 +45,8 @@ import {
   WifiOff,
   Wifi,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Edit
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -268,6 +269,16 @@ export default function App() {
   const [newEventEndTime, setNewEventEndTime] = useState('');
   const [newEventInstagramUrl, setNewEventInstagramUrl] = useState('');
   const [eventSuccess, setEventSuccess] = useState(false);
+
+  // Event Edit State
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
+  const [editEventName, setEditEventName] = useState('');
+  const [editEventPlace, setEditEventPlace] = useState('');
+  const [editEventDate, setEditEventDate] = useState('');
+  const [editEventStartTime, setEditEventStartTime] = useState('');
+  const [editEventEndTime, setEditEventEndTime] = useState('');
+  const [editEventInstagramUrl, setEditEventInstagramUrl] = useState('');
+  const [editEventSuccess, setEditEventSuccess] = useState(false);
 
   // Active View Mode ('user' for Dance Fans, 'organizer' for DJ Organizer / Admin)
   const [userRole, setUserRole] = useState<'user' | 'organizer'>('user');
@@ -902,6 +913,84 @@ export default function App() {
     }
   };
 
+  // Open Event Details for Editing
+  const handleOpenEditEvent = (ev: DanceEvent) => {
+    setEditingEventId(ev.id);
+    setEditEventName(ev.name);
+    setEditEventPlace(ev.place);
+    setEditEventInstagramUrl(ev.instagramUrl || '');
+    
+    if (ev.time && ev.time.includes('|')) {
+      const parts = ev.time.split('|');
+      setEditEventDate(parts[0] || '');
+      setEditEventStartTime(parts[1] || '');
+      setEditEventEndTime(parts[2] || '');
+    } else {
+      setEditEventDate('');
+      setEditEventStartTime('');
+      setEditEventEndTime('');
+    }
+  };
+
+  // Update/Save Event Details Action
+  const handleUpdateEvent = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!editingEventId) return;
+    
+    if (!editEventName.trim() || !editEventPlace.trim() || !editEventDate || !editEventStartTime) {
+      alert("Please fill in the Event Name, Place, Date, and Start Time first!");
+      return;
+    }
+    
+    const combinedTime = `${editEventDate}|${editEventStartTime}` + (editEventEndTime ? `|${editEventEndTime}` : "");
+    
+    let didSucceed = true;
+    
+    if (isFirebaseConfigured && db && !connectionError && currentUser && !currentUser.isSimulated) {
+      try {
+        const eventDocRef = doc(db, 'danceEvents', editingEventId);
+        await updateDoc(eventDocRef, {
+          name: editEventName.trim(),
+          place: editEventPlace.trim(),
+          time: combinedTime,
+          instagramUrl: editEventInstagramUrl.trim() || ''
+        });
+      } catch (err) {
+        console.error("Failed to update event details in Firebase:", err);
+        handleFirestoreError(err, OperationType.WRITE, `danceEvents/${editingEventId}`);
+        didSucceed = false;
+        const errMsg = err instanceof Error ? err.message : String(err);
+        alert(`Failed to update event details on Firebase:\n${errMsg}\n\nPlease verify that you are logged in using our admin credentials.`);
+        return;
+      }
+    }
+    
+    if (didSucceed) {
+      // Update local memory and localStorage state
+      const updatedEvents = events.map((ev) => {
+        if (ev.id === editingEventId) {
+          return {
+            ...ev,
+            name: editEventName.trim(),
+            place: editEventPlace.trim(),
+            time: combinedTime,
+            instagramUrl: editEventInstagramUrl.trim() || undefined
+          };
+        }
+        return ev;
+      });
+      
+      setEvents(updatedEvents);
+      localStorage.setItem('rpd_offline_dance_events', JSON.stringify(updatedEvents));
+      
+      setEditEventSuccess(true);
+      setTimeout(() => {
+        setEditEventSuccess(false);
+        setEditingEventId(null);
+      }, 1000);
+    }
+  };
+
   // Synchronize active event globally (Admins only)
   const handleToggleActiveEvent = async (targetId: string) => {
     if (isFirebaseConfigured && db) {
@@ -1420,6 +1509,71 @@ export default function App() {
           </motion.div>
         )}
 
+        {/* DANCER VIEW: SELECT UPCOMING EVENT BOARD (Only in userRole === 'user' and when there are multiple upcoming events) */}
+        {userRole === 'user' && upcomingEventsSorted.length > 1 && (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3" id="dancer-upcoming-events-selector">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="space-y-0.5">
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-brand-yellow tracking-wider">
+                  <Calendar className="w-3.5 h-3.5" />
+                  Select Upcoming Event Board / เลือกบอร์ดอีเวนต์ประกาศ
+                </span>
+                <p className="text-[10px] text-slate-400">
+                  Choose an event below to submit song requests and vote on the play board.
+                </p>
+              </div>
+              <span className="inline-flex text-[9px] font-bold text-brand-yellow/85 bg-brand-yellow/10 border border-brand-yellow/20 px-2 py-0.5 rounded-full uppercase tracking-wider self-start sm:self-auto">
+                {upcomingEventsSorted.length} Upcoming Events Public
+              </span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+              {upcomingEventsSorted.map((ev) => {
+                const isSelected = ev.id === effectiveEventId;
+                const isClosest = ev.id === upcomingEventsSorted[0].id;
+                return (
+                  <button
+                    key={ev.id}
+                    type="button"
+                    onClick={() => setDancerSelectedEventId(ev.id)}
+                    className={`flex items-start text-left p-3 rounded-xl border transition relative duration-200 cursor-pointer select-none ${
+                      isSelected
+                        ? 'bg-slate-950/80 border-brand-yellow shadow-md shadow-brand-yellow/5'
+                        : 'bg-slate-950/30 border-slate-900 text-slate-350 hover:bg-slate-950/80 hover:border-slate-850 hover:text-white'
+                    }`}
+                  >
+                    {isClosest && (
+                      <span className="absolute -top-2 -right-1.5 text-[8px] font-black uppercase bg-brand-yellow text-slate-950 px-2 py-0.5 rounded-full shadow shadow-brand-yellow/25">
+                        Closest / ใกล้สุด
+                      </span>
+                    )}
+                    <div className="mr-3 shrink-0 mt-0.5">
+                      <div className={`p-2 rounded-lg ${
+                        isSelected ? 'bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20' : 'bg-slate-900 text-slate-500 border border-transparent'
+                      }`}>
+                        <Calendar className="w-3.5 h-3.5" />
+                      </div>
+                    </div>
+                    <div className="space-y-1 min-w-0 flex-1">
+                      <h4 className="text-xs font-black truncate text-white">{ev.name}</h4>
+                      <div className="flex flex-col gap-0.5 text-[10px] text-slate-400">
+                        <p className="flex items-center gap-1 text-slate-400 truncate">
+                          <MapPin className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span className="truncate">{ev.place}</span>
+                        </p>
+                        <p className="flex items-center gap-1 text-slate-400">
+                          <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                          <span>{formatEventTime(ev.time)}</span>
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* EVENT SPOTLIGHT INFORMATION & HISTORY SELECTOR */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-4" id="event-spotlight-banner">
           <div className="flex items-start gap-3">
@@ -1427,7 +1581,7 @@ export default function App() {
               <Calendar className="w-5 h-5" />
             </div>
             <div>
-              {userRole === 'user' && isActiveEventPast ? (
+              {userRole === 'user' && isEventPast(currentEvent) ? (
                 <>
                   <div className="flex items-center gap-2">
                     <span className="text-[9px] font-black uppercase bg-brand-yellow text-slate-950 px-2 py-0.5 rounded shadow shadow-brand-yellow/30">
@@ -1485,7 +1639,7 @@ export default function App() {
               </span>
             </div>
           ) : (
-            userRole === 'user' && isActiveEventPast ? (
+            userRole === 'user' && isEventPast(currentEvent) ? (
               <div className="flex items-center gap-2 bg-slate-950/40 text-slate-400 border border-slate-800 px-3.5 py-2 rounded-2xl text-[11px] font-extrabold shadow-sm">
                 <span className="relative flex h-2 w-2">
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-slate-600"></span>
@@ -1507,7 +1661,7 @@ export default function App() {
         {/* REINVERTED TRANSITION WRAPPER */}
         <AnimatePresence mode="wait">
           {userRole === 'user' ? (
-            isActiveEventPast ? (
+            isEventPast(currentEvent) ? (
               <motion.div
                 key="dancer-past-closed"
                 initial={{ opacity: 0, scale: 0.98 }}
@@ -1554,73 +1708,6 @@ export default function App() {
                 className="space-y-4"
                 id="dancer-dancefloor-view"
               >
-              {/* UPCOMING EVENTS SWAPPER (Dancers only) */}
-              {upcomingEventsSorted.length > 1 && (
-                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 space-y-3" id="dancer-upcoming-events-selector">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <div className="space-y-0.5">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase text-brand-yellow tracking-wider">
-                        <Calendar className="w-3.5 h-3.5" />
-                        Select Upcoming Event Board / เลือกบอร์ดอีเวนต์ประกาศ
-                      </span>
-                      <p className="text-[10px] text-slate-400">
-                        Choose an event below to submit song requests and vote on the play board.
-                      </p>
-                    </div>
-                    {upcomingEventsSorted.length > 1 && (
-                      <span className="inline-flex text-[9px] font-bold text-brand-yellow/85 bg-brand-yellow/10 border border-brand-yellow/20 px-2 py-0.5 rounded-full uppercase tracking-wider self-start sm:self-auto">
-                        {upcomingEventsSorted.length} Upcoming Events Public
-                      </span>
-                    )}
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-                    {upcomingEventsSorted.map((ev) => {
-                      const isSelected = ev.id === effectiveEventId;
-                      const isClosest = ev.id === upcomingEventsSorted[0].id;
-                      return (
-                        <button
-                          key={ev.id}
-                          type="button"
-                          onClick={() => setDancerSelectedEventId(ev.id)}
-                          className={`flex items-start text-left p-3 rounded-xl border transition relative duration-200 cursor-pointer select-none ${
-                            isSelected
-                              ? 'bg-slate-950/80 border-brand-yellow shadow-md shadow-brand-yellow/5'
-                              : 'bg-slate-950/30 border-slate-900 text-slate-350 hover:bg-slate-950/80 hover:border-slate-850 hover:text-white'
-                          }`}
-                        >
-                          {isClosest && (
-                            <span className="absolute -top-2 -right-1.5 text-[8px] font-black uppercase bg-brand-yellow text-slate-950 px-2 py-0.5 rounded-full shadow shadow-brand-yellow/25">
-                              Closest / ใกล้สุด
-                            </span>
-                          )}
-                          <div className="mr-3 shrink-0 mt-0.5">
-                            <div className={`p-2 rounded-lg ${
-                              isSelected ? 'bg-brand-yellow/10 text-brand-yellow border border-brand-yellow/20' : 'bg-slate-900 text-slate-500 border border-transparent'
-                            }`}>
-                              <Calendar className="w-3.5 h-3.5" />
-                            </div>
-                          </div>
-                          <div className="space-y-1 min-w-0 flex-1">
-                            <h4 className="text-xs font-black truncate text-white">{ev.name}</h4>
-                            <div className="flex flex-col gap-0.5 text-[10px] text-slate-400">
-                              <p className="flex items-center gap-1 text-slate-400 truncate">
-                                <MapPin className="w-3 h-3 text-slate-500 shrink-0" />
-                                <span className="truncate">{ev.place}</span>
-                              </p>
-                              <p className="flex items-center gap-1 text-slate-400">
-                                <Clock className="w-3 h-3 text-slate-500 shrink-0" />
-                                <span>{formatEventTime(ev.time)}</span>
-                              </p>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
               {/* MOBILE/TABLET RESPONSIVE TABS Swapper - only visible on small screens (< lg) */}
               <div className="lg:hidden flex items-center bg-slate-900/90 p-1.5 rounded-2xl border border-slate-800 sticky top-0 z-30 backdrop-blur-md gap-1">
                 <button
@@ -2396,13 +2483,14 @@ export default function App() {
                   <span>Manage Play Spaces & Events</span>
                 </h3>
                 <p className="text-[11px] text-slate-400 mb-4 leading-relaxed">
-                  Review active or past events. Organizers can delete any event (and all associated track suggestions) here.
+                  Click any event row below to select it and instantly toggle the <strong>[Complete Track Backlog]</strong> panel below to view that event's requests. You can also edit details, activate an event globally, or delete them.
                 </p>
 
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs text-slate-300">
                     <thead className="bg-slate-950 text-[10px] font-black uppercase text-slate-400 border border-slate-800/50">
                       <tr>
+                        <th className="p-2.5 text-center w-8">View</th>
                         <th className="p-2.5">Event Name</th>
                         <th className="p-2.5">Location</th>
                         <th className="p-2.5">Scheduled Date & Time</th>
@@ -2414,9 +2502,28 @@ export default function App() {
                       {events.map((ev) => {
                         const isPast = isEventPast(ev);
                         const isLiveFocus = ev.id === activeEventId;
+                        const isSelected = ev.id === selectedEventId;
                         return (
-                          <tr key={ev.id} className="hover:bg-slate-950/40 transition">
-                            <td className="p-2.5 font-bold text-slate-200">
+                          <tr
+                            key={ev.id}
+                            onClick={() => setSelectedEventId(ev.id)}
+                            className={`transition duration-200 cursor-pointer ${
+                              isSelected
+                                ? 'bg-slate-900/90 border-l-4 border-l-brand-yellow font-medium text-white shadow-inner'
+                                : 'hover:bg-slate-950/60'
+                            }`}
+                          >
+                            <td className="p-2.5 text-center">
+                              <input
+                                type="radio"
+                                name="selectedOrganizerEvent"
+                                checked={isSelected}
+                                onChange={() => setSelectedEventId(ev.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                className="accent-brand-yellow cursor-pointer"
+                              />
+                            </td>
+                            <td className="p-2.5 font-bold">
                               {ev.name}
                             </td>
                             <td className="p-2.5 text-slate-350">
@@ -2426,31 +2533,52 @@ export default function App() {
                               {formatEventTime(ev.time)}
                             </td>
                             <td className="p-2.5">
-                              {isLiveFocus ? (
-                                <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
-                                  🎯 Active Live
-                                </span>
-                              ) : isPast ? (
-                                <span className="bg-slate-950/80 text-slate-400 border border-slate-800 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
-                                  ⏱️ Past Event
-                                </span>
-                              ) : (
-                                <span className="bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
-                                  📅 Scheduled
-                                </span>
-                              )}
+                              <div className="flex flex-col gap-1 items-start">
+                                {isLiveFocus && (
+                                  <span className="bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
+                                    🎯 Active Live
+                                  </span>
+                                )}
+                                {isSelected && (
+                                  <span className="bg-brand-yellow/15 text-brand-yellow border border-brand-yellow/30 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider">
+                                    👀 Selected Backlog
+                                  </span>
+                                )}
+                                {!isLiveFocus && isPast && (
+                                  <span className="bg-slate-950/80 text-slate-400 border border-slate-800 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                                    ⏱️ Past Event
+                                  </span>
+                                )}
+                                {!isLiveFocus && !isPast && (
+                                  <span className="bg-blue-500/10 text-blue-400 border border-blue-500/25 px-2.5 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider">
+                                    📅 Scheduled
+                                  </span>
+                                )}
+                              </div>
                             </td>
-                            <td className="p-2.5 text-right flex items-center justify-end gap-2">
+                            <td className="p-2.5 text-right flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
                               {ev.id !== activeEventId && (
                                 <button
-                                  onClick={() => handleToggleActiveEvent(ev.id)}
-                                  className="text-[9px] font-black uppercase bg-slate-950 border border-slate-800 hover:border-brand-yellow hover:text-white px-2.5 py-1.5 rounded-lg transition"
+                                  onClick={() => {
+                                    handleToggleActiveEvent(ev.id);
+                                    setSelectedEventId(ev.id); // Also select backlog when activating
+                                  }}
+                                  className="text-[9px] font-black uppercase bg-slate-950 border border-slate-800 hover:border-brand-yellow hover:text-white px-2.5 py-1.5 rounded-lg transition cursor-pointer"
                                   title="Change live focus to this event"
                                   type="button"
                                 >
                                   Activate
                                 </button>
                               )}
+                              <button
+                                onClick={() => handleOpenEditEvent(ev)}
+                                className="text-[9px] font-black uppercase bg-slate-950 border border-slate-800 hover:border-brand-yellow hover:text-white px-2.5 py-1.5 rounded-lg transition flex items-center gap-1 cursor-pointer"
+                                title="Edit Event details"
+                                type="button"
+                              >
+                                <Edit className="w-3 h-3 text-brand-yellow" />
+                                <span>Edit</span>
+                              </button>
                               <button
                                 disabled={ev.id === 'event_1'}
                                 onClick={() => handleDeleteEvent(ev.id)}
@@ -4360,6 +4488,153 @@ export default function App() {
                   </button>
                 </div>
               </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* EDIT EVENT DETAILS MODAL */}
+      <AnimatePresence>
+        {editingEventId !== null && (
+          <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-md flex items-center justify-center p-4 z-50">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-slate-900 border-2 border-brand-yellow max-w-md w-full rounded-3xl overflow-hidden shadow-2xl relative"
+            >
+              <div className="h-1.5 w-full bg-brand-yellow" />
+              
+              <form onSubmit={handleUpdateEvent} className="p-6 space-y-4">
+                <div className="flex items-start justify-between gap-3 pb-2 border-b border-slate-800">
+                  <div className="space-y-0.5">
+                    <span className="text-[9px] font-black uppercase text-brand-yellow tracking-widest block">
+                      Organizer Workspace
+                    </span>
+                    <h3 className="font-extrabold text-white text-sm sm:text-base leading-snug flex items-center gap-2">
+                      <Edit className="w-4 h-4 text-brand-yellow" />
+                      <span>Edit Event Details / แก้ไขรายละเอียดอีเวนต์</span>
+                    </h3>
+                  </div>
+                  <button
+                    onClick={() => setEditingEventId(null)}
+                    className="p-1 hover:bg-slate-800 rounded-full transition cursor-pointer flex-shrink-0"
+                    type="button"
+                  >
+                    <X className="w-4 h-4 text-slate-400 hover:text-white" />
+                  </button>
+                </div>
+
+                {editEventSuccess && (
+                  <div className="bg-emerald-950/30 border border-emerald-500/30 text-emerald-300 rounded-2xl p-4 text-center font-sans text-xs flex items-center justify-center gap-2">
+                    <CheckCircle className="w-4 h-4 text-emerald-400" />
+                    <span className="font-bold">Event details successfully updated!</span>
+                  </div>
+                )}
+
+                <div className="space-y-3">
+                  {/* Event Name */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-350 uppercase tracking-wider mb-1">
+                      Event Name / ชื่อกิจกรรม <span className="text-brand-yellow">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editEventName}
+                      onChange={(e) => setEditEventName(e.target.value)}
+                      placeholder="e.g. Bangkok Random Play Dance Pride Fest 2026"
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-650 transition outline-none"
+                    />
+                  </div>
+
+                  {/* Location/Place */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-350 uppercase tracking-wider mb-1">
+                      Location / สถานที่จัดงาน <span className="text-brand-yellow">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={editEventPlace}
+                      onChange={(e) => setEditEventPlace(e.target.value)}
+                      placeholder="e.g. Siam Square Block I Walking Street, Bangkok"
+                      required
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-650 transition outline-none"
+                    />
+                  </div>
+
+                  {/* Date, Start Time, End Time */}
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="col-span-1">
+                      <label className="block text-[10px] font-black text-slate-350 uppercase tracking-wider mb-1">
+                        Date / วันที่ <span className="text-brand-yellow">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={editEventDate}
+                        onChange={(e) => setEditEventDate(e.target.value)}
+                        required
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3 py-2 text-xs text-white transition outline-none"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-[10px] font-black text-slate-355 uppercase tracking-wider mb-1">
+                        Start / เวลาเริ่ม <span className="text-brand-yellow">*</span>
+                      </label>
+                      <input
+                        type="time"
+                        value={editEventStartTime}
+                        onChange={(e) => setEditEventStartTime(e.target.value)}
+                        required
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3 py-2 text-xs text-white transition outline-none"
+                      />
+                    </div>
+                    <div className="col-span-1">
+                      <label className="block text-[10px] font-black text-slate-355 uppercase tracking-wider mb-1">
+                        End / เวลาสิ้นสุด
+                      </label>
+                      <input
+                        type="time"
+                        value={editEventEndTime}
+                        onChange={(e) => setEditEventEndTime(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3 py-2 text-xs text-white transition outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Instagram URL */}
+                  <div>
+                    <label className="block text-[10px] font-black text-slate-355 uppercase tracking-wider mb-1 flex items-center gap-1">
+                      <Instagram className="w-3 h-3 text-pink-500" />
+                      <span>Instagram Poster Post URL</span>
+                    </label>
+                    <input
+                      type="url"
+                      value={editEventInstagramUrl}
+                      onChange={(e) => setEditEventInstagramUrl(e.target.value)}
+                      placeholder="e.g. https://www.instagram.com/p/..."
+                      className="w-full bg-slate-950 border border-slate-800 focus:border-brand-yellow rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-650 transition outline-none"
+                    />
+                  </div>
+                </div>
+
+                <div className="pt-3 flex items-center justify-end gap-2.5">
+                  <button
+                    onClick={() => setEditingEventId(null)}
+                    className="px-4 py-2 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-350 hover:text-white font-extrabold text-xs uppercase rounded-xl cursor-pointer transition text-center"
+                    type="button"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-brand-yellow hover:brightness-110 active:scale-98 text-slate-950 font-black text-xs uppercase rounded-xl cursor-pointer transition text-center shadow-lg shadow-brand-yellow/10 flex items-center gap-1"
+                  >
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Changes</span>
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}
